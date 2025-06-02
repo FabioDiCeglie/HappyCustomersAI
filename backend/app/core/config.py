@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     langchain_tracing_v2: bool = Field(True, env="LANGCHAIN_TRACING_V2")
     langchain_project: str = Field("feedback-ai", env="LANGCHAIN_PROJECT")
     
-    # Database Configuration
-    database_url: str = Field(..., env="DATABASE_URL")
-    database_echo: bool = Field(False, env="DATABASE_ECHO")
+    # MongoDB Configuration
+    mongodb_url: str = Field("mongodb://localhost:27017", env="MONGODB_URL")
+    mongodb_database: str = Field("email_support_ai", env="MONGODB_DATABASE")
     
     # Email Configuration
     smtp_host: str = Field(..., env="SMTP_HOST")

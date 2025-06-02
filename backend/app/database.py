@@ -1,67 +1,77 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from motor.motor_asyncio import AsyncIOMotorClient
+from beanie import init_beanie
 import logging
+from typing import Optional
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Create SQLAlchemy engine
-if settings.database_url.startswith("sqlite"):
-    # For SQLite, we need special configuration
-    engine = create_engine(
-        settings.database_url,
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-        echo=settings.database_echo
-    )
-else:
-    # For PostgreSQL and other databases
-    engine = create_engine(
-        settings.database_url,
-        echo=settings.database_echo
-    )
-
-# Create SessionLocal class
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Base class for models
-Base = declarative_base()
+# MongoDB client
+client: Optional[AsyncIOMotorClient] = None
+database = None
 
 
-def get_db() -> Session:
-    """Dependency to get database session"""
-    db = SessionLocal()
+async def connect_to_mongo():
+    """Create database connection"""
+    global client, database
     try:
-        yield db
-    finally:
-        db.close()
+        logger.info("Connecting to MongoDB...")
+        client = AsyncIOMotorClient(settings.mongodb_url)
+        database = client[settings.mongodb_database]
+        
+        # Test connection
+        await client.admin.command('ping')
+        logger.info("✅ Connected to MongoDB successfully")
+        
+        return True
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to MongoDB: {e}")
+        return False
 
 
-def create_tables():
-    """Create all database tables"""
-    logger.info("Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("✅ Database tables created successfully")
+async def close_mongo_connection():
+    """Close database connection"""
+    global client
+    if client:
+        client.close()
+        logger.info("👋 Disconnected from MongoDB")
 
 
-def drop_tables():
-    """Drop all database tables (for development/testing)"""
-    logger.warning("Dropping all database tables...")
-    Base.metadata.drop_all(bind=engine)
-    logger.info("✅ Database tables dropped")
+async def init_database():
+    """Initialize database with Beanie"""
+    from app.models.review import Review
+    
+    try:
+        await init_beanie(
+            database=database,
+            document_models=[Review]
+        )
+        logger.info("✅ Beanie initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Beanie: {e}")
+        return False
+
+
+async def get_database():
+    """Get database instance"""
+    return database
 
 
 async def check_database_connection() -> bool:
     """Check if database connection is working"""
     try:
-        db = SessionLocal()
-        # Simple query to test connection
-        db.execute("SELECT 1")
-        db.close()
-        return True
+        if client:
+            await client.admin.command('ping')
+            return True
+        return False
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
-        return False 
+        return False
+
+
+# For backward compatibility during migration
+def get_db():
+    """Deprecated: MongoDB doesn't need session management like SQLAlchemy"""
+    pass 

@@ -16,7 +16,7 @@ An intelligent system that automatically classifies customer reviews and sends p
 ├── backend/           # Python FastAPI server
 │   ├── app/
 │   │   ├── agents/    # LangGraph AI agents
-│   │   ├── models/    # Database models
+│   │   ├── models/    # MongoDB document models
 │   │   ├── services/  # Business logic
 │   │   └── api/       # API endpoints
 ├── frontend/          # React application
@@ -31,10 +31,11 @@ An intelligent system that automatically classifies customer reviews and sends p
 
 **Backend:**
 - FastAPI (Python web framework)
-- SQLAlchemy (ORM)
+- Beanie (Async MongoDB ODM)
+- Motor (Async MongoDB driver)
 - LangGraph (AI agent framework)
 - Gemini AI (Language model)
-- PostgreSQL (Database)
+- MongoDB (NoSQL Database)
 - SMTP (Email service)
 
 **Frontend:**
@@ -47,10 +48,6 @@ An intelligent system that automatically classifies customer reviews and sends p
 ## 🚀 Quick Start
 
 ### Prerequisites
-```bash
-# Install uv (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
 
 ### Backend Setup
 ```bash
@@ -93,8 +90,9 @@ The system includes customizable email templates for different scenarios:
 GEMINI_API_KEY=your_gemini_api_key
 LANGCHAIN_API_KEY=your_langchain_api_key
 
-# Database
-DATABASE_URL=postgresql://user:password@localhost/feedback_db
+# MongoDB Configuration
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DATABASE=email_support_ai
 
 # Email Configuration
 SMTP_HOST=smtp.gmail.com
@@ -113,11 +111,3 @@ SECRET_KEY=your_secret_key
 - Customer satisfaction trends
 - Response rate analytics
 - Manual review override capabilities
-
-## 🔮 Future Enhancements
-
-- Multi-language support
-- Integration with review platforms (Google, Yelp, etc.)
-- A/B testing for email templates
-- Advanced analytics and reporting
-- Mobile app for business owners 

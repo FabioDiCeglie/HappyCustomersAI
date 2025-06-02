@@ -1,11 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from sqlalchemy.orm import Session
 import logging
 
 from app.core.config import settings
-from app.database import get_db, create_tables, check_database_connection
+from app.database import connect_to_mongo, close_mongo_connection, init_database, check_database_connection
 from app.services.review_service import review_service
 from app.services.email_service import email_service
 from app.agents.review_agent import review_agent
@@ -20,10 +19,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     logger.info("🚀 Starting AI Customer Feedback Management System")
     
-    # Initialize database
-    create_tables()
-    db_healthy = await check_database_connection()
-    logger.info(f"🗄️  Database: {'✅ Connected' if db_healthy else '❌ Connection failed'}")
+    # Initialize MongoDB
+    mongo_connected = await connect_to_mongo()
+    logger.info(f"🗄️  MongoDB: {'✅ Connected' if mongo_connected else '❌ Connection failed'}")
+    
+    if mongo_connected:
+        beanie_initialized = await init_database()
+        logger.info(f"📄 Beanie: {'✅ Initialized' if beanie_initialized else '❌ Initialization failed'}")
     
     # Test email service (optional)
     # email_healthy = await email_service.test_connection()
@@ -35,6 +37,7 @@ async def lifespan(app: FastAPI):
     yield
     
     logger.info("👋 Shutting down application")
+    await close_mongo_connection()
 
 
 # Create FastAPI app
@@ -89,7 +92,7 @@ from datetime import datetime
 
 class ReviewCreate(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=255)
-    customer_email: str = Field(..., regex=r'^[^@]+@[^@]+\.[^@]+$')
+    customer_email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
     customer_phone: Optional[str] = Field(None, max_length=50)
     review_text: str = Field(..., min_length=10)
     rating: Optional[int] = Field(None, ge=1, le=5)
@@ -99,7 +102,7 @@ class ReviewCreate(BaseModel):
 
 
 class ReviewResponse(BaseModel):
-    id: int
+    id: str
     customer_name: str
     customer_email: str
     review_text: str
@@ -130,13 +133,12 @@ class AnalysisResponse(BaseModel):
     error: str
 
 @app.post("/api/v1/reviews", response_model=dict)
-async def create_review(review: ReviewCreate, db: Session = Depends(get_db)):
+async def create_review(review: ReviewCreate):
     """Create a new review and process it through the complete AI + email workflow"""
     try:
         logger.info(f"📝 Creating new review from {review.customer_name}")
         
         result = await review_service.create_and_process_review(
-            db=db,
             customer_name=review.customer_name,
             customer_email=review.customer_email,
             customer_phone=review.customer_phone,
@@ -188,20 +190,39 @@ async def get_reviews(
     limit: int = 100,
     sentiment: Optional[str] = None,
     urgency: Optional[str] = None,
-    email_sent: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    email_sent: Optional[bool] = None
 ):
     """Get reviews with optional filtering"""
     try:
-        reviews = review_service.get_reviews(
-            db=db,
+        reviews = await review_service.get_reviews(
             skip=skip,
             limit=limit,
             sentiment=sentiment,
             urgency=urgency,
             email_sent=email_sent
         )
-        return reviews
+        
+        # Convert MongoDB documents to response format
+        response_reviews = []
+        for review in reviews:
+            response_reviews.append(ReviewResponse(
+                id=str(review.id),
+                customer_name=review.customer_name,
+                customer_email=review.customer_email,
+                review_text=review.review_text,
+                rating=review.rating,
+                sentiment=review.sentiment,
+                sentiment_score=review.sentiment_score,
+                urgency_level=review.urgency_level,
+                categories=review.categories,
+                key_issues=review.key_issues,
+                email_sent=review.email_sent,
+                email_template_used=review.email_template_used,
+                created_at=review.created_at,
+                ai_processed=review.ai_processed
+            ))
+        
+        return response_reviews
     except Exception as e:
         logger.error(f"❌ Failed to fetch reviews: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch reviews: {str(e)}")

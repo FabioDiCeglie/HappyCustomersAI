@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
-from sqlalchemy.orm import Session
+from bson import ObjectId
 import logging
 
-from app.models.review import Review
+from app.models.review import Review, SentimentType, UrgencyLevel
 from app.agents.review_agent import review_agent
 from app.services.email_service import email_service
 
@@ -14,7 +14,6 @@ class ReviewService:
     
     async def create_and_process_review(
         self,
-        db: Session,
         customer_name: str,
         customer_email: str,
         review_text: str,
@@ -30,7 +29,7 @@ class ReviewService:
         try:
             logger.info(f"🆕 Processing new review from {customer_name}")
             
-            # Create new review record
+            # Create new review document
             review = Review(
                 customer_name=customer_name,
                 customer_email=customer_email,
@@ -44,21 +43,19 @@ class ReviewService:
                 created_at=datetime.utcnow()
             )
             
-            # Add to database
-            db.add(review)
-            db.commit()
-            db.refresh(review)
+            # Save to MongoDB
+            await review.save()
             
             logger.info(f"💾 Review saved to database with ID: {review.id}")
             
             # Analyze with AI
-            analysis_result = await self._analyze_review(db, review)
+            analysis_result = await self._analyze_review(review)
             
             # Send email if needed
-            email_result = await self._send_email_if_needed(db, review)
+            email_result = await self._send_email_if_needed(review)
             
             return {
-                "review_id": review.id,
+                "review_id": str(review.id),
                 "customer_name": review.customer_name,
                 "customer_email": review.customer_email,
                 "analysis": analysis_result,
@@ -69,10 +66,9 @@ class ReviewService:
             
         except Exception as e:
             logger.error(f"❌ Failed to process review: {str(e)}")
-            db.rollback()
             raise
     
-    async def _analyze_review(self, db: Session, review: Review) -> Dict[str, Any]:
+    async def _analyze_review(self, review: Review) -> Dict[str, Any]:
         """Analyze review with AI agent"""
         try:
             logger.info(f"🧠 Analyzing review {review.id} with AI")
@@ -96,7 +92,7 @@ class ReviewService:
             if analysis.get("error"):
                 review.ai_processing_error = analysis["error"]
             
-            db.commit()
+            await review.save()
             
             logger.info(f"✅ AI analysis complete: {analysis['sentiment']} sentiment, {analysis['urgency_level']} urgency")
             
@@ -106,10 +102,10 @@ class ReviewService:
             logger.error(f"❌ AI analysis failed for review {review.id}: {str(e)}")
             review.ai_processing_error = str(e)
             review.ai_processed = False
-            db.commit()
+            await review.save()
             raise
     
-    async def _send_email_if_needed(self, db: Session, review: Review) -> Dict[str, Any]:
+    async def _send_email_if_needed(self, review: Review) -> Dict[str, Any]:
         """Send follow-up email if the AI determined it's needed"""
         
         result = {"sent": False, "template": None, "error": None}
@@ -141,7 +137,7 @@ class ReviewService:
                 review.email_template_used = email_template
                 review.updated_at = datetime.utcnow()
                 
-                db.commit()
+                await review.save()
                 
                 result["sent"] = True
                 result["template"] = email_template
@@ -157,9 +153,8 @@ class ReviewService:
         
         return result
     
-    def get_reviews(
+    async def get_reviews(
         self,
-        db: Session,
         skip: int = 0,
         limit: int = 100,
         sentiment: Optional[str] = None,
@@ -168,43 +163,56 @@ class ReviewService:
     ) -> List[Review]:
         """Get reviews with optional filtering"""
         
-        query = db.query(Review)
+        # Build query filters
+        query_filters = {}
         
         if sentiment:
-            query = query.filter(Review.sentiment == sentiment)
+            query_filters["sentiment"] = sentiment
         
         if urgency:
-            query = query.filter(Review.urgency_level == urgency)
+            query_filters["urgency_level"] = urgency
             
         if email_sent is not None:
-            query = query.filter(Review.email_sent == email_sent)
+            query_filters["email_sent"] = email_sent
         
-        return query.order_by(Review.created_at.desc()).offset(skip).limit(limit).all()
+        # Execute query with MongoDB
+        reviews = await Review.find(query_filters).sort(-Review.created_at).skip(skip).limit(limit).to_list()
+        
+        return reviews
     
-    def get_review_by_id(self, db: Session, review_id: int) -> Optional[Review]:
+    async def get_review_by_id(self, review_id: str) -> Optional[Review]:
         """Get a specific review by ID"""
-        return db.query(Review).filter(Review.id == review_id).first()
+        try:
+            return await Review.get(ObjectId(review_id))
+        except Exception:
+            return None
     
-    def get_analytics(self, db: Session) -> Dict[str, Any]:
+    async def get_analytics(self) -> Dict[str, Any]:
         """Get analytics data for dashboard"""
         
-        total_reviews = db.query(Review).count()
+        # Total reviews
+        total_reviews = await Review.count()
         
         # Sentiment breakdown
-        sentiment_counts = db.query(Review.sentiment, db.func.count(Review.id)).group_by(Review.sentiment).all()
-        sentiment_breakdown = {sentiment: count for sentiment, count in sentiment_counts}
+        sentiment_pipeline = [
+            {"$group": {"_id": "$sentiment", "count": {"$sum": 1}}}
+        ]
+        sentiment_results = await Review.aggregate(sentiment_pipeline).to_list(None)
+        sentiment_breakdown = {item["_id"]: item["count"] for item in sentiment_results if item["_id"]}
         
         # Urgency breakdown
-        urgency_counts = db.query(Review.urgency_level, db.func.count(Review.id)).group_by(Review.urgency_level).all()
-        urgency_breakdown = {urgency: count for urgency, count in urgency_counts}
+        urgency_pipeline = [
+            {"$group": {"_id": "$urgency_level", "count": {"$sum": 1}}}
+        ]
+        urgency_results = await Review.aggregate(urgency_pipeline).to_list(None)
+        urgency_breakdown = {item["_id"]: item["count"] for item in urgency_results if item["_id"]}
         
         # Email stats
-        emails_sent = db.query(Review).filter(Review.email_sent == True).count()
+        emails_sent = await Review.find({"email_sent": True}).count()
         
         # Recent reviews (last 7 days)
-        from datetime import timedelta
         week_ago = datetime.utcnow() - timedelta(days=7)
-        recent_reviews = db.query(Review).filter(Review.created_at >= week_ago).count()
+        recent_reviews = await Review.find({"created_at": {"$gte": week_ago}}).count()
         
         return {
             "total_reviews": total_reviews,
