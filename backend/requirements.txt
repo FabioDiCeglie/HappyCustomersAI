@@ -26,6 +26,10 @@ emails==0.6.0
 httpx==0.25.2
 aiofiles==23.2.1
 
+# Excel processing
+pandas==2.1.4
+openpyxl==3.1.2
+
 # Database and caching
 redis==5.0.1
 

@@ -56,24 +56,24 @@ class ReviewAnalysisAgent:
         try:
             system_message = """You are an expert at analyzing customer review sentiment for restaurants.
             
-Analyze the sentiment of the review and provide:
-1. Overall sentiment: positive, negative, or neutral
-2. Confidence score (0.0 to 1.0)
-3. Brief reasoning
+                Analyze the sentiment of the review and provide:
+                1. Overall sentiment: positive, negative, or neutral
+                2. Confidence score (0.0 to 1.0)
+                3. Brief reasoning
 
-Return your response in this JSON format:
-{
-    "sentiment": "positive|negative|neutral",
-    "confidence": 0.85,
-    "reasoning": "Brief explanation of your analysis"
-}"""
-            
+                Return your response in this JSON format:
+                {
+                    "sentiment": "positive|negative|neutral",
+                    "confidence": 0.85,
+                    "reasoning": "Brief explanation of your analysis"
+                }"""
+                            
             human_message = f"""
-Review to analyze:
-Customer: {state['customer_name']}
-Rating: {state.get('rating', 'Not provided')}/5
-Review: {state['review_text']}
-"""
+                Review to analyze:
+                Customer: {state['customer_name']}
+                Rating: {state.get('rating', 'Not provided')}/5
+                Review: {state['review_text']}
+                """
             
             response = await self.llm.ainvoke([
                 SystemMessage(content=system_message),
@@ -99,22 +99,22 @@ Review: {state['review_text']}
             categories = [cat.value for cat in ReviewCategory]
             system_message = f"""You are an expert at categorizing restaurant customer feedback.
             
-Analyze the review and identify which categories apply. Choose from:
-{', '.join(categories)}
+            Analyze the review and identify which categories apply. Choose from:
+            {', '.join(categories)}
 
-Also extract the key specific issues mentioned.
+            Also extract the key specific issues mentioned.
 
-Return your response in this JSON format:
-{{
-    "categories": ["category1", "category2"],
-    "key_issues": ["specific issue 1", "specific issue 2"]
-}}"""
-            
+            Return your response in this JSON format:
+            {{
+                "categories": ["category1", "category2"],
+                "key_issues": ["specific issue 1", "specific issue 2"]
+            }}"""
+                        
             human_message = f"""
-Review to categorize:
-{state['review_text']}
-Sentiment: {state['sentiment']}
-"""
+            Review to categorize:
+            {state['review_text']}
+            Sentiment: {state['sentiment']}
+            """
             
             response = await self.llm.ainvoke([
                 SystemMessage(content=system_message),
@@ -138,27 +138,27 @@ Sentiment: {state['sentiment']}
             urgency_levels = [level.value for level in UrgencyLevel]
             system_message = f"""You are an expert at assessing the urgency of customer complaints for restaurants.
             
-Based on the review sentiment, issues, and context, determine the urgency level:
-- critical: Immediate health/safety concerns, extremely angry customers, viral potential
-- high: Very unsatisfied customers, multiple serious issues, demand immediate attention
-- medium: Moderately unsatisfied, specific fixable issues
-- low: Minor issues, constructive feedback
+            Based on the review sentiment, issues, and context, determine the urgency level:
+            - critical: Immediate health/safety concerns, extremely angry customers, viral potential
+            - high: Very unsatisfied customers, multiple serious issues, demand immediate attention
+            - medium: Moderately unsatisfied, specific fixable issues
+            - low: Minor issues, constructive feedback
 
-Choose from: {', '.join(urgency_levels)}
+            Choose from: {', '.join(urgency_levels)}
 
-Return your response in this JSON format:
-{{
-    "urgency_level": "critical|high|medium|low",
-    "reasoning": "Brief explanation for the urgency level"
-}}"""
-            
+            Return your response in this JSON format:
+            {{
+                "urgency_level": "critical|high|medium|low",
+                "reasoning": "Brief explanation for the urgency level"
+            }}"""
+                        
             human_message = f"""
-Review Analysis:
-Sentiment: {state['sentiment']} (confidence: {state['sentiment_score']})
-Categories: {', '.join(state['categories'])}
-Key Issues: {', '.join(state['key_issues'])}
-Original Review: {state['review_text']}
-"""
+            Review Analysis:
+            Sentiment: {state['sentiment']} (confidence: {state['sentiment_score']})
+            Categories: {', '.join(state['categories'])}
+            Key Issues: {', '.join(state['key_issues'])}
+            Original Review: {state['review_text']}
+            """
             
             response = await self.llm.ainvoke([
                 SystemMessage(content=system_message),

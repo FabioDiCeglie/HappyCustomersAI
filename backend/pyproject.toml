@@ -35,6 +35,8 @@ dependencies = [
     "aiofiles==23.2.1",
     # Database and caching
     "redis==5.0.1",
+    "pandas==2.1.4",
+    "openpyxl==3.1.2",
 ]
 
 [project.optional-dependencies]

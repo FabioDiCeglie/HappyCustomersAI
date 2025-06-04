@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     
     # MongoDB Configuration
     mongodb_url: str = Field("mongodb://localhost:27017", env="MONGODB_URL")
-    mongodb_database: str = Field("email_support_ai", env="MONGODB_DATABASE")
     
     # Email Configuration
     smtp_host: str = Field(..., env="SMTP_HOST")

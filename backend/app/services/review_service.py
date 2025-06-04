@@ -153,40 +153,6 @@ class ReviewService:
         
         return result
     
-    async def get_reviews(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        sentiment: Optional[str] = None,
-        urgency: Optional[str] = None,
-        email_sent: Optional[bool] = None
-    ) -> List[Review]:
-        """Get reviews with optional filtering"""
-        
-        # Build query filters
-        query_filters = {}
-        
-        if sentiment:
-            query_filters["sentiment"] = sentiment
-        
-        if urgency:
-            query_filters["urgency_level"] = urgency
-            
-        if email_sent is not None:
-            query_filters["email_sent"] = email_sent
-        
-        # Execute query with MongoDB
-        reviews = await Review.find(query_filters).sort(-Review.created_at).skip(skip).limit(limit).to_list()
-        
-        return reviews
-    
-    async def get_review_by_id(self, review_id: str) -> Optional[Review]:
-        """Get a specific review by ID"""
-        try:
-            return await Review.get(ObjectId(review_id))
-        except Exception:
-            return None
-    
     async def get_analytics(self) -> Dict[str, Any]:
         """Get analytics data for dashboard"""
         
@@ -223,6 +189,4 @@ class ReviewService:
             "email_rate": emails_sent / total_reviews if total_reviews > 0 else 0
         }
 
-
-# Global instance
 review_service = ReviewService() 
