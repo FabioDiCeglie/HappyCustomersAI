@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Application Settings
     debug: bool = Field(False, env="DEBUG")
     cors_origins: List[str] = Field(
-        ["http://localhost:3000"], env="CORS_ORIGINS"
+        ["http://localhost:3000", "http://localhost:8501", "http://127.0.0.1:8501", "http://localhost:8080", "http://127.0.0.1:8080"], env="CORS_ORIGINS"
     )
     api_v1_str: str = Field("/api/v1", env="API_V1_STR")
     
