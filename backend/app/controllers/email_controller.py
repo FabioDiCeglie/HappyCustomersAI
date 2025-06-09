@@ -1,6 +1,6 @@
 import logging
 from fastapi import HTTPException
-from app.services.email_service import email_service
+from app.services.email_service import test_email_connection
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 async def test_email_service():
     """Test email service connection"""
     try:
-        is_connected = await email_service.test_connection()
+        is_connected = await test_email_connection()
         return {
             "email_service": "connected" if is_connected else "disconnected",
             "message": "Email service test completed"

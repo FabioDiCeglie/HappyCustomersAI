@@ -1,6 +1,6 @@
 import logging
 from fastapi import HTTPException, UploadFile
-from app.services.file_service import file_service
+from app.services.file_service import process_excel_reviews
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ async def upload_excel_reviews(
         logger.info(f"📁 Received Excel file upload: {file.filename}")
         
         # Process the Excel file
-        result = await file_service.process_excel_reviews(
+        result = await process_excel_reviews(
             file=file,
             process_with_ai=process_with_ai,
             send_emails=send_emails

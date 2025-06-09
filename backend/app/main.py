@@ -26,7 +26,8 @@ async def lifespan(app: FastAPI):
         logger.info(f"📄 Beanie: {'✅ Initialized' if beanie_initialized else '❌ Initialization failed'}")
     
     # Test email service (optional)
-    # email_healthy = await email_service.test_connection()
+    # from app.services.email_service import test_email_connection
+    # email_healthy = await test_email_connection()
     # logger.info(f"📧 Email service: {'✅ Connected' if email_healthy else '❌ Connection failed'}")
     
     logger.info(f"🤖 AI Agent initialized with Gemini Pro")

@@ -1,6 +1,6 @@
 import logging
 from fastapi import HTTPException
-from app.services.review_service import review_service
+from app.services.review_service import get_review_stats
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 async def get_dashboard_analytics():
     """Get comprehensive analytics data for dashboard"""
     try:
-        analytics = await review_service.get_analytics()
+        analytics = await get_review_stats()
         return analytics
     except Exception as e:
         logger.error(f"❌ Failed to get dashboard analytics: {str(e)}")
