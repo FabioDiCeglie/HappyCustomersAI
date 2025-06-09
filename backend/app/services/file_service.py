@@ -57,7 +57,6 @@ def validate_email(email: str) -> bool:
 async def parse_excel_file(file: UploadFile) -> pd.DataFrame:
     """Parse Excel file and return DataFrame"""
     try:
-        # Read file content
         content = await file.read()
         
         # Parse based on file type
@@ -126,17 +125,13 @@ def validate_dataframe_structure(df: pd.DataFrame) -> Dict[str, Any]:
 
 async def process_excel_reviews(
     file: UploadFile, 
-    process_with_ai: bool = True,
-    send_emails: bool = False
 ) -> Dict[str, Any]:
     """Process Excel file with customer reviews"""
     try:
         logger.info(f"📁 Processing Excel file: {file.filename}")
         
-        # Validate file
         await validate_file(file)
         
-        # Parse Excel file
         df = await parse_excel_file(file)
         
         if df.empty:
@@ -158,7 +153,6 @@ async def process_excel_reviews(
                 'negative': 0,
                 'neutral': 0
             },
-            'emails_sent': 0
         }
         
         for index, row in df.iterrows():
@@ -181,7 +175,6 @@ async def process_excel_reviews(
                     results['errors'].append(f"Row {index + 1}: Missing review text")
                     continue
                 
-                # Validate email format
                 if not validate_email(customer_email):
                     results['errors'].append(f"Row {index + 1}: Invalid email format: {customer_email}")
                     continue
@@ -192,44 +185,8 @@ async def process_excel_reviews(
                     customer_email=customer_email,
                     review_text=review_text,
                 )
-                
-                review_data = {
-                    'row': index + 1,
-                    'customer_name': customer_name,
-                    'customer_email': customer_email,
-                    'review_id': review_result['review_id'],
-                    'sentiment': None,
-                    'email_sent': False
-                }
-                
-                # Process with AI if requested
-                if process_with_ai:
-                    try:
-                        analysis_result = await analyze_review(
-                            review_text=review_text,
-                            customer_name=customer_name,
-                            rating=None
-                        )
-                        
-                        review_data['sentiment'] = analysis_result.get('sentiment')
-                        review_data['sentiment_score'] = analysis_result.get('sentiment_score')
-                        review_data['urgency_level'] = analysis_result.get('urgency_level')
-                        
-                        # Update sentiment summary
-                        sentiment = analysis_result.get('sentiment', 'neutral').lower()
-                        if sentiment in results['sentiment_summary']:
-                            results['sentiment_summary'][sentiment] += 1
-                        
-                        # Track email sending
-                        if analysis_result.get('should_send_email', False):
-                            review_data['email_sent'] = True
-                            results['emails_sent'] += 1
-                        
-                    except Exception as ai_error:
-                        logger.error(f"AI processing failed for row {index + 1}: {str(ai_error)}")
-                        results['errors'].append(f"Row {index + 1}: AI processing failed - {str(ai_error)}")
-                
-                results['reviews_created'].append(review_data)
+            
+                results['reviews_created'].append(review_result)
                 results['processed'] += 1
                 
             except Exception as row_error:
@@ -238,34 +195,17 @@ async def process_excel_reviews(
                 continue
         
         logger.info(f"✅ Processed {results['processed']} reviews from Excel file")
+
+        for review in results['reviews_created']:
+            if review['analysis']['sentiment'] == 'negative':
+                results['sentiment_summary']['negative'] += 1
+            elif review['analysis']['sentiment'] == 'positive':
+                results['sentiment_summary']['positive'] += 1
+            else:
+                results['sentiment_summary']['neutral'] += 1
         
         return results
         
     except Exception as e:
         logger.error(f"❌ Failed to process Excel file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
-
-
-async def get_file_processing_summary(results: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate a summary of file processing results"""
-    try:
-        total_rows = results.get('total_rows', 0)
-        processed = results.get('processed', 0)
-        errors = results.get('errors', [])
-        
-        success_rate = (processed / total_rows * 100) if total_rows > 0 else 0
-        
-        return {
-            'total_rows': total_rows,
-            'processed_successfully': processed,
-            'failed_rows': len(errors),
-            'success_rate': round(success_rate, 2),
-            'sentiment_breakdown': results.get('sentiment_summary', {}),
-            'emails_sent': results.get('emails_sent', 0),
-            'errors': errors[:10],  # Limit to first 10 errors
-            'has_more_errors': len(errors) > 10
-        }
-    
-    except Exception as e:
-        logger.error(f"❌ Failed to generate processing summary: {str(e)}")
-        return {} 

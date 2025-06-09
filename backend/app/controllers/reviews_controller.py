@@ -7,18 +7,13 @@ logger = logging.getLogger(__name__)
 
 async def upload_excel_reviews(
     file: UploadFile,
-    process_with_ai: bool = True,
-    send_emails: bool = False
 ):
     """Upload Excel file with customer reviews for batch processing"""
     try:
         logger.info(f"📁 Received Excel file upload: {file.filename}")
         
-        # Process the Excel file
         result = await process_excel_reviews(
             file=file,
-            process_with_ai=process_with_ai,
-            send_emails=send_emails
         )
         
         logger.info(f"✅ Excel processing complete: {result['processed']}/{result['total_rows']} reviews processed")
@@ -30,7 +25,6 @@ async def upload_excel_reviews(
         }
         
     except HTTPException:
-        # Re-raise HTTP exceptions from the service
         raise
     except Exception as e:
         logger.error(f"❌ Excel upload failed: {str(e)}")

@@ -19,33 +19,43 @@ async def create_and_process_review(
     
     try:
         logger.info(f"🆕 Processing new review from {customer_name}")
+        logger.info(f"🧠 Analyzing review with AI")
+
+        analysis = await analyze_review(
+            review_text=review_text,
+            customer_name=customer_name,
+            rating=None
+        )
         
-        # Create new review document
         review = Review(
             customer_name=customer_name,
             customer_email=customer_email,
             review_text=review_text,
-            created_at=datetime.utcnow()
+            sentiment=analysis["sentiment"],
+            sentiment_score=analysis["sentiment_score"],
+            urgency_level=analysis["urgency_level"],
+            categories=analysis["categories"],
+            key_issues=analysis["key_issues"],
+            ai_processed=True,
+            ai_analysis_data=analysis,
+            ai_processing_error=analysis.get("error", None),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
         )
         
-        # Save to MongoDB
+        # Save complete review to database in one operation
         await review.save()
         
         logger.info(f"💾 Review saved to database with ID: {review.id}")
-        
-        # Analyze with AI
-        analysis_result = await analyze_review_with_ai(review)
-        
-        # Send email if needed
-        email_result = await send_email_if_needed(review)
+        logger.info(f"✅ AI analysis complete: {analysis['sentiment']} sentiment, {analysis['urgency_level']} urgency")
         
         return {
             "review_id": str(review.id),
             "customer_name": review.customer_name,
             "customer_email": review.customer_email,
-            "analysis": analysis_result,
-            "email_sent": email_result.get("sent", False),
-            "email_template": email_result.get("template"),
+            "analysis": analysis,
+            "email_sent": False,
+            "email_template": None,
             "message": "Review processed successfully"
         }
         
@@ -55,7 +65,7 @@ async def create_and_process_review(
 
 
 async def analyze_review_with_ai(review: Review) -> Dict[str, Any]:
-    """Analyze review with AI agent"""
+    """Analyze review with AI agent (legacy function - now integrated into create_and_process_review)"""
     try:
         logger.info(f"🧠 Analyzing review {review.id} with AI")
         
@@ -92,98 +102,51 @@ async def analyze_review_with_ai(review: Review) -> Dict[str, Any]:
         raise
 
 
-async def send_email_if_needed(review: Review) -> Dict[str, Any]:
-    """Send email if the review requires it"""
-    try:
-        if not review.ai_processed or not review.ai_analysis_data:
-            logger.warning(f"⚠️ Review {review.id} not processed by AI yet")
-            return {"sent": False, "reason": "Review not analyzed yet"}
+# async def send_email_if_needed(review: Review) -> Dict[str, Any]:
+#     """Send email if the review requires it"""
+#     try:
+#         if not review.ai_processed or not review.ai_analysis_data:
+#             logger.warning(f"⚠️ Review {review.id} not processed by AI yet")
+#             return {"sent": False, "reason": "Review not analyzed yet"}
         
-        analysis = review.ai_analysis_data
-        should_send = analysis.get("should_send_email", False)
-        template = analysis.get("email_template")
+#         analysis = review.ai_analysis_data
+#         should_send = analysis.get("should_send_email", False)
+#         template = analysis.get("email_template")
         
-        if not should_send or not template:
-            logger.info(f"📧 No email needed for review {review.id}")
-            return {"sent": False, "reason": "Email not required"}
+#         if not should_send or not template:
+#             logger.info(f"📧 No email needed for review {review.id}")
+#             return {"sent": False, "reason": "Email not required"}
         
-        logger.info(f"📧 Sending {template} email for review {review.id}")
+#         logger.info(f"📧 Sending {template} email for review {review.id}")
         
-        email_sent = await send_email(
-            to_email=review.customer_email,
-            customer_name=review.customer_name,
-            template_name=template,
-            key_issues=review.key_issues or []
-        )
+#         email_sent = await send_email(
+#             to_email=review.customer_email,
+#             customer_name=review.customer_name,
+#             template_name=template,
+#             key_issues=review.key_issues or []
+#         )
         
-        if email_sent:
-            review.email_sent = True
-            review.email_sent_at = datetime.utcnow()
-            review.email_template_used = template
-            review.updated_at = datetime.utcnow()
-            await review.save()
+#         if email_sent:
+#             review.email_sent = True
+#             review.email_sent_at = datetime.utcnow()
+#             review.email_template_used = template
+#             review.updated_at = datetime.utcnow()
+#             await review.save()
             
-            logger.info(f"✅ Email sent successfully for review {review.id}")
-            return {"sent": True, "template": template}
-        else:
-            logger.error(f"❌ Failed to send email for review {review.id}")
-            return {"sent": False, "reason": "Email sending failed"}
+#             logger.info(f"✅ Email sent successfully for review {review.id}")
+#             return {"sent": True, "template": template}
+#         else:
+#             logger.error(f"❌ Failed to send email for review {review.id}")
+#             return {"sent": False, "reason": "Email sending failed"}
         
-    except Exception as e:
-        logger.error(f"❌ Email processing failed for review {review.id}: {str(e)}")
-        return {"sent": False, "reason": f"Error: {str(e)}"}
-
-
-async def get_review_by_id(review_id: str) -> Optional[Review]:
-    """Get a review by ID"""
-    try:
-        return await Review.get(ObjectId(review_id))
-    except Exception as e:
-        logger.error(f"❌ Failed to get review {review_id}: {str(e)}")
-        return None
-
-
-async def get_reviews_by_filters(
-    sentiment: Optional[str] = None,
-    urgency_level: Optional[str] = None,
-    email_sent: Optional[bool] = None,
-    limit: int = 50
-) -> List[Review]:
-    """Get reviews with optional filters"""
-    try:
-        query = {}
-        
-        if sentiment:
-            query["sentiment"] = sentiment
-        if urgency_level:
-            query["urgency_level"] = urgency_level
-        if email_sent is not None:
-            query["email_sent"] = email_sent
-        
-        return await Review.find(query).limit(limit).to_list()
-    
-    except Exception as e:
-        logger.error(f"❌ Failed to get reviews with filters: {str(e)}")
-        return []
-
-
-async def get_recent_reviews(days: int = 30, limit: int = 100) -> List[Review]:
-    """Get recent reviews"""
-    try:
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
-        return await Review.find(
-            Review.created_at >= cutoff_date
-        ).sort(-Review.created_at).limit(limit).to_list()
-    
-    except Exception as e:
-        logger.error(f"❌ Failed to get recent reviews: {str(e)}")
-        return []
+#     except Exception as e:
+#         logger.error(f"❌ Email processing failed for review {review.id}: {str(e)}")
+#         return {"sent": False, "reason": f"Error: {str(e)}"}
 
 
 async def get_review_stats() -> Dict[str, Any]:
     """Get review statistics"""
     try:
-        # Count total reviews
         total_reviews = await Review.count()
         
         # Count by sentiment
