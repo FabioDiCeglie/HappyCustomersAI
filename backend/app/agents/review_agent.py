@@ -54,7 +54,7 @@ class ReviewAnalysisAgent:
     async def _analyze_sentiment(self, state: ReviewAnalysisState) -> ReviewAnalysisState:
         """Analyze the sentiment of the review"""
         try:
-            system_message = """You are an expert at analyzing customer review sentiment for restaurants.
+            system_message = """You are an expert at analyzing customer review sentiment across all industries and business types.
             
                 Analyze the sentiment of the review and provide:
                 1. Overall sentiment: positive, negative, or neutral
@@ -97,10 +97,21 @@ class ReviewAnalysisAgent:
         """Categorize the specific issues mentioned in the review"""
         try:
             categories = [cat.value for cat in ReviewCategory]
-            system_message = f"""You are an expert at categorizing restaurant customer feedback.
+            system_message = f"""You are an expert at categorizing customer feedback across all industries and business types.
             
-            Analyze the review and identify which categories apply. Choose from:
-            {', '.join(categories)}
+            Analyze the review and identify which categories apply. The categories are universal and can apply to any business:
+            - quality: Issues with product/service quality, defects, or standards
+            - service: Customer service, staff behavior, responsiveness
+            - pricing: Cost concerns, value for money, billing issues
+            - delivery: Shipping, logistics, timing, fulfillment
+            - usability: Ease of use, user interface, accessibility
+            - communication: Information clarity, updates, transparency
+            - performance: Speed, reliability, functionality, uptime
+            - support: Help resources, documentation, technical assistance
+            - experience: Overall customer journey, satisfaction, emotions
+            - other: Issues that don't fit the above categories
+
+            Available categories: {', '.join(categories)}
 
             Also extract the key specific issues mentioned.
 
@@ -136,13 +147,13 @@ class ReviewAnalysisAgent:
         """Determine the urgency level of the review"""
         try:
             urgency_levels = [level.value for level in UrgencyLevel]
-            system_message = f"""You are an expert at assessing the urgency of customer complaints for restaurants.
+            system_message = f"""You are an expert at assessing the urgency of customer feedback across all industries.
             
             Based on the review sentiment, issues, and context, determine the urgency level:
-            - critical: Immediate health/safety concerns, extremely angry customers, viral potential
-            - high: Very unsatisfied customers, multiple serious issues, demand immediate attention
-            - medium: Moderately unsatisfied, specific fixable issues
-            - low: Minor issues, constructive feedback
+            - critical: Safety concerns, security issues, extremely angry customers, potential legal/PR issues, service outages
+            - high: Very unsatisfied customers, multiple serious issues, loss of functionality, demand immediate attention
+            - medium: Moderately unsatisfied, specific fixable issues, feature requests, minor bugs
+            - low: Minor issues, positive feedback with suggestions, general improvements
 
             Choose from: {', '.join(urgency_levels)}
 
@@ -189,10 +200,14 @@ class ReviewAnalysisAgent:
                 # Determine email template based on categories and urgency
                 if state["urgency_level"] == "critical":
                     state["email_template"] = "critical_response"
-                elif "food_quality" in state["categories"]:
-                    state["email_template"] = "food_quality_concern"
+                elif "quality" in state["categories"]:
+                    state["email_template"] = "quality_concern"
                 elif "service" in state["categories"]:
                     state["email_template"] = "service_concern"
+                elif "delivery" in state["categories"]:
+                    state["email_template"] = "delivery_concern"
+                elif "support" in state["categories"]:
+                    state["email_template"] = "support_concern"
                 else:
                     state["email_template"] = "general_concern"
             else:
@@ -230,7 +245,6 @@ class ReviewAnalysisAgent:
             error=""
         )
         
-        # Run the graph
         result = await self.graph.ainvoke(initial_state)
         
         return {

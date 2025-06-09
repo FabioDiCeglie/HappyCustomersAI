@@ -179,10 +179,6 @@ class FileService:
                         customer_name=customer_name,
                         customer_email=customer_email,
                         review_text=review_text,
-                        rating=None,  # Not provided in Excel
-                        visit_date=None,
-                        table_number=None,
-                        order_number=None
                     )
                     
                     review_data = {

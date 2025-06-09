@@ -17,12 +17,6 @@ class ReviewService:
         customer_name: str,
         customer_email: str,
         review_text: str,
-        rating: Optional[int] = None,
-        customer_phone: Optional[str] = None,
-        visit_date: Optional[datetime] = None,
-        table_number: Optional[str] = None,
-        order_number: Optional[str] = None,
-        review_source: str = "manual"
     ) -> Dict[str, Any]:
         """Create a new review and process it through the complete AI + email workflow"""
         
@@ -33,13 +27,7 @@ class ReviewService:
             review = Review(
                 customer_name=customer_name,
                 customer_email=customer_email,
-                customer_phone=customer_phone,
                 review_text=review_text,
-                rating=rating,
-                visit_date=visit_date,
-                table_number=table_number,
-                order_number=order_number,
-                review_source=review_source,
                 created_at=datetime.utcnow()
             )
             
