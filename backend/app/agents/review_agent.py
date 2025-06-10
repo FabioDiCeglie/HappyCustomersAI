@@ -1,10 +1,31 @@
-import json
+import logging
 from typing import Dict, List, Any, TypedDict, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage
+import google.generativeai as genai
+from pydantic import BaseModel, Field
+from app.models.review import UrgencyLevel, ReviewCategory
+from langchain.prompts import PromptTemplate
+from langchain.output_parsers import PydanticOutputParser
 from langgraph.graph import StateGraph, END
 from app.core.config import settings
-from app.models.review import SentimentType, UrgencyLevel, ReviewCategory
+
+# Set up logger
+logger = logging.getLogger(__name__)
+
+
+# Pydantic models for structured outputs
+class SentimentAnalysis(BaseModel):
+    sentiment: str
+    confidence: float
+
+class IssueCategorizationAnalysis(BaseModel):
+    categories: List[str]
+    key_issues: List[str]
+
+
+class UrgencyAnalysis(BaseModel):
+    urgency_level: str
+    reasoning: str
 
 
 class ReviewAnalysisState(TypedDict):
@@ -23,18 +44,26 @@ class ReviewAnalysisState(TypedDict):
 
 
 # Global LLM instance for reuse
-_llm_instance: Optional[ChatGoogleGenerativeAI] = None
+_llm_instance: Optional[Any] = None
 
-
-def get_llm() -> ChatGoogleGenerativeAI:
+def get_llm() -> Any:
     """Get or create LLM instance"""
     global _llm_instance
     if _llm_instance is None:
+        # Configure the Google Generative AI client
+        genai.configure(api_key=settings.google_api_key)
+        
+        # Create the client (GenerativeModel instance)
+        generative_model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        
         _llm_instance = ChatGoogleGenerativeAI(
-            model="gemini-pro",
-            google_api_key=settings.gemini_api_key,
-            temperature=0.1
+            model="gemini-2.0-flash-exp",
+            client=genai,
+            google_api_key=settings.google_api_key,
+            temperature=0.1,
         )
+        # Manually set the generative model
+        _llm_instance._generative_model = generative_model
     return _llm_instance
 
 
@@ -60,41 +89,51 @@ def create_review_analysis_graph() -> StateGraph:
 
 async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Analyze the sentiment of the review"""
+    logger.info(f"Starting sentiment analysis for customer: {state['customer_name']}")
+    
     try:
-        system_message = """You are an expert at analyzing customer review sentiment across all industries and business types.
+        # Set up the parser
+        parser = PydanticOutputParser(pydantic_object=SentimentAnalysis)
+        
+        # Create the prompt template
+        prompt = PromptTemplate(
+            template="""You are an expert at analyzing customer review sentiment across all industries and business types.
         
             Analyze the sentiment of the review and provide:
             1. Overall sentiment: positive, negative, or neutral
             2. Confidence score (0.0 to 1.0)
             3. Brief reasoning
 
-            Return your response in this JSON format:
-            {
-                "sentiment": "positive|negative|neutral",
-                "confidence": 0.85,
-                "reasoning": "Brief explanation of your analysis"
-            }"""
-                        
-        human_message = f"""
+            {format_instructions}
+            
             Review to analyze:
-            Customer: {state['customer_name']}
-            Rating: {state.get('rating', 'Not provided')}/5
-            Review: {state['review_text']}
-            """
+            Customer: {customer_name}
+            Rating: {rating}/5
+            Review: {review_text}
+            """,
+            input_variables=["customer_name", "rating", "review_text"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
         
         llm = get_llm()
-        response = await llm.ainvoke([
-            SystemMessage(content=system_message),
-            HumanMessage(content=human_message)
-        ])
         
-        # Parse the JSON response
-        analysis = json.loads(response.content)
+        # Create the chain
+        chain = prompt | llm | parser
         
-        state["sentiment"] = analysis["sentiment"]
-        state["sentiment_score"] = analysis["confidence"]
+        # Invoke the chain
+        analysis = await chain.ainvoke({
+            "customer_name": state['customer_name'],
+            "rating": state.get('rating', 'Not provided'),
+            "review_text": state['review_text']
+        })
+        
+        state["sentiment"] = analysis.sentiment
+        state["sentiment_score"] = analysis.confidence
+        
+        logger.info(f"Sentiment analysis completed - Sentiment: {state['sentiment']}, Score: {state['sentiment_score']}")
         
     except Exception as e:
+        logger.error(f"Error analyzing sentiment: {e}")
         state["error"] = f"Sentiment analysis error: {str(e)}"
         state["sentiment"] = "neutral"
         state["sentiment_score"] = 0.0
@@ -104,9 +143,17 @@ async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
 
 async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Categorize the specific issues mentioned in the review"""
+    logger.info(f"Starting issue categorization for customer: {state['customer_name']}")
+    
     try:
         categories = [cat.value for cat in ReviewCategory]
-        system_message = f"""You are an expert at categorizing customer feedback across all industries and business types.
+        
+        # Set up the parser
+        parser = PydanticOutputParser(pydantic_object=IssueCategorizationAnalysis)
+        
+        # Create the prompt template
+        prompt = PromptTemplate(
+            template="""You are an expert at categorizing customer feedback across all industries and business types.
         
         Analyze the review and identify which categories apply. The categories are universal and can apply to any business:
         - quality: Issues with product/service quality, defects, or standards
@@ -120,33 +167,39 @@ async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
         - experience: Overall customer journey, satisfaction, emotions
         - other: Issues that don't fit the above categories
 
-        Available categories: {', '.join(categories)}
+        Available categories: {categories}
 
         Also extract the key specific issues mentioned.
 
-        Return your response in this JSON format:
-        {{
-            "categories": ["category1", "category2"],
-            "key_issues": ["specific issue 1", "specific issue 2"]
-        }}"""
-                    
-        human_message = f"""
+        {format_instructions}
+        
         Review to categorize:
-        {state['review_text']}
-        Sentiment: {state['sentiment']}
-        """
+        {review_text}
+        Sentiment: {sentiment}
+        """,
+            input_variables=["categories", "review_text", "sentiment"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
         
         llm = get_llm()
-        response = await llm.ainvoke([
-            SystemMessage(content=system_message),
-            HumanMessage(content=human_message)
-        ])
         
-        analysis = json.loads(response.content)
-        state["categories"] = analysis["categories"]
-        state["key_issues"] = analysis["key_issues"]
+        # Create the chain
+        chain = prompt | llm | parser
+        
+        # Invoke the chain
+        analysis = await chain.ainvoke({
+            "categories": ', '.join(categories),
+            "review_text": state['review_text'],
+            "sentiment": state['sentiment']
+        })
+        
+        state["categories"] = analysis.categories
+        state["key_issues"] = analysis.key_issues
+        
+        logger.info(f"Issue categorization completed - Categories: {state['categories']}, Key issues: {len(state['key_issues'])} identified")
         
     except Exception as e:
+        logger.error(f"Categorization error for customer {state['customer_name']}: {str(e)}")
         state["error"] = f"Categorization error: {str(e)}"
         state["categories"] = ["other"]
         state["key_issues"] = []
@@ -156,9 +209,17 @@ async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
 
 async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Determine the urgency level of the review"""
+    logger.info(f"Starting urgency determination for customer: {state['customer_name']}")
+    
     try:
         urgency_levels = [level.value for level in UrgencyLevel]
-        system_message = f"""You are an expert at assessing the urgency of customer feedback across all industries.
+        
+        # Set up the parser
+        parser = PydanticOutputParser(pydantic_object=UrgencyAnalysis)
+        
+        # Create the prompt template
+        prompt = PromptTemplate(
+            template="""You are an expert at assessing the urgency of customer feedback across all industries.
         
         Based on the review sentiment, issues, and context, determine the urgency level:
         - critical: Safety concerns, security issues, extremely angry customers, potential legal/PR issues, service outages
@@ -166,32 +227,41 @@ async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
         - medium: Moderately unsatisfied, specific fixable issues, feature requests, minor bugs
         - low: Minor issues, positive feedback with suggestions, general improvements
 
-        Choose from: {', '.join(urgency_levels)}
+        Choose from: {urgency_levels}
 
-        Return your response in this JSON format:
-        {{
-            "urgency_level": "critical|high|medium|low",
-            "reasoning": "Brief explanation for the urgency level"
-        }}"""
-                    
-        human_message = f"""
+        {format_instructions}
+        
         Review Analysis:
-        Sentiment: {state['sentiment']} (confidence: {state['sentiment_score']})
-        Categories: {', '.join(state['categories'])}
-        Key Issues: {', '.join(state['key_issues'])}
-        Original Review: {state['review_text']}
-        """
+        Sentiment: {sentiment} (confidence: {sentiment_score})
+        Categories: {categories}
+        Key Issues: {key_issues}
+        Original Review: {review_text}
+        """,
+            input_variables=["urgency_levels", "sentiment", "sentiment_score", "categories", "key_issues", "review_text"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
         
         llm = get_llm()
-        response = await llm.ainvoke([
-            SystemMessage(content=system_message),
-            HumanMessage(content=human_message)
-        ])
         
-        analysis = json.loads(response.content)
-        state["urgency_level"] = analysis["urgency_level"]
+        # Create the chain
+        chain = prompt | llm | parser
+        
+        # Invoke the chain
+        analysis = await chain.ainvoke({
+            "urgency_levels": ', '.join(urgency_levels),
+            "sentiment": state['sentiment'],
+            "sentiment_score": state['sentiment_score'],
+            "categories": ', '.join(state['categories']),
+            "key_issues": ', '.join(state['key_issues']),
+            "review_text": state['review_text']
+        })
+        
+        state["urgency_level"] = analysis.urgency_level
+        
+        logger.info(f"Urgency determination completed - Urgency level: {state['urgency_level']}")
         
     except Exception as e:
+        logger.error(f"Urgency determination error for customer {state['customer_name']}: {str(e)}")
         state["error"] = f"Urgency determination error: {str(e)}"
         state["urgency_level"] = "medium"
     
@@ -255,6 +325,8 @@ async def analyze_review(
 ) -> Dict[str, Any]:
     """Analyze a review and return the complete analysis"""
     
+    logger.info(f"Starting complete review analysis for customer: {customer_name}")
+    
     initial_state = ReviewAnalysisState(
         review_text=review_text,
         customer_name=customer_name,
@@ -273,6 +345,8 @@ async def analyze_review(
     graph = get_review_analysis_graph()
     result = await graph.ainvoke(initial_state)
     
+    logger.info(f"Review analysis completed for customer: {customer_name} - Sentiment: {result['sentiment']}, Urgency: {result['urgency_level']}, Email needed: {result['should_send_email']}")
+    
     return {
         "sentiment": result["sentiment"],
         "sentiment_score": result["sentiment_score"],
@@ -283,4 +357,4 @@ async def analyze_review(
         "email_template": result["email_template"],
         "analysis_complete": result["analysis_complete"],
         "error": result.get("error", "")
-    } 
+    }

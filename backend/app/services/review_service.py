@@ -1,11 +1,9 @@
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
-from bson import ObjectId
-import logging
-
-from app.models.review import Review, SentimentType, UrgencyLevel
+from datetime import datetime
+from typing import Dict, Any
+from app.models.review import Review
 from app.agents.review_agent import analyze_review
 from app.services.email_service import send_email, test_email_connection
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +13,19 @@ async def create_and_process_review(
     customer_email: str,
     review_text: str,
 ) -> Dict[str, Any]:
-    """Create a new review and process it through the complete AI + email workflow"""
+    """Create a new review or update existing one and process it through the complete AI + email workflow"""
     
     try:
-        logger.info(f"🆕 Processing new review from {customer_name}")
+        # Check if a review from this customer email already exists
+        existing_review = await Review.find_one(Review.customer_email == customer_email)
+        
+        if existing_review:
+            logger.info(f"🔄 Updating existing review for customer: {customer_name} ({customer_email})")
+            is_update = True
+        else:
+            logger.info(f"🆕 Processing new review from {customer_name} ({customer_email})")
+            is_update = False
+        
         logger.info(f"🧠 Analyzing review with AI")
 
         analysis = await analyze_review(
@@ -27,26 +34,46 @@ async def create_and_process_review(
             rating=None
         )
         
-        review = Review(
-            customer_name=customer_name,
-            customer_email=customer_email,
-            review_text=review_text,
-            sentiment=analysis["sentiment"],
-            sentiment_score=analysis["sentiment_score"],
-            urgency_level=analysis["urgency_level"],
-            categories=analysis["categories"],
-            key_issues=analysis["key_issues"],
-            ai_processed=True,
-            ai_analysis_data=analysis,
-            ai_processing_error=analysis.get("error", None),
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
+        if existing_review:
+            # Update existing review
+            existing_review.customer_name = customer_name
+            existing_review.review_text = review_text
+            existing_review.sentiment = analysis["sentiment"]
+            existing_review.sentiment_score = analysis["sentiment_score"]
+            existing_review.urgency_level = analysis["urgency_level"]
+            existing_review.categories = analysis["categories"]
+            existing_review.key_issues = analysis["key_issues"]
+            existing_review.ai_processed = True
+            existing_review.ai_analysis_data = analysis
+            existing_review.ai_processing_error = analysis.get("error", None)
+            existing_review.updated_at = datetime.utcnow()
+            
+            review = existing_review
+            await review.save()
+            
+            logger.info(f"💾 Updated existing review in database with ID: {review.id}")
+        else:
+            # Create new review
+            review = Review(
+                customer_name=customer_name,
+                customer_email=customer_email,
+                review_text=review_text,
+                sentiment=analysis["sentiment"],
+                sentiment_score=analysis["sentiment_score"],
+                urgency_level=analysis["urgency_level"],
+                categories=analysis["categories"],
+                key_issues=analysis["key_issues"],
+                ai_processed=True,
+                ai_analysis_data=analysis,
+                ai_processing_error=analysis.get("error", None),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            
+            await review.save()
+            
+            logger.info(f"💾 New review saved to database with ID: {review.id}")
         
-        # Save complete review to database in one operation
-        await review.save()
-        
-        logger.info(f"💾 Review saved to database with ID: {review.id}")
         logger.info(f"✅ AI analysis complete: {analysis['sentiment']} sentiment, {analysis['urgency_level']} urgency")
         
         return {
@@ -56,7 +83,8 @@ async def create_and_process_review(
             "analysis": analysis,
             "email_sent": False,
             "email_template": None,
-            "message": "Review processed successfully"
+            "is_update": is_update,
+            "message": f"Review {'updated' if is_update else 'created'} and processed successfully"
         }
         
     except Exception as e:

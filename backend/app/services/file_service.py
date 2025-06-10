@@ -8,7 +8,6 @@ import re
 from functools import lru_cache
 
 from app.services.review_service import create_and_process_review
-from app.agents.review_agent import analyze_review
 
 logger = logging.getLogger(__name__)
 
