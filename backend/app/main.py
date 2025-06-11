@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.database import connect_to_mongo, close_mongo_connection, init_database
+from app.services.email_service import test_email_connection
 from app.routes import api_router
 import logging
 import uvicorn
@@ -23,10 +24,8 @@ async def lifespan(app: FastAPI):
         beanie_initialized = await init_database()
         logger.info(f"📄 Beanie: {'✅ Initialized' if beanie_initialized else '❌ Initialization failed'}")
     
-    # Test email service (optional)
-    # from app.services.email_service import test_email_connection
-    # email_healthy = await test_email_connection()
-    # logger.info(f"📧 Email service: {'✅ Connected' if email_healthy else '❌ Connection failed'}")
+    email_healthy = await test_email_connection()
+    logger.info(f"📧 Email service: {'✅ Connected' if email_healthy else '❌ Connection failed'}")
     
     logger.info(f"🤖 AI Agent initialized with Gemini Pro")
     logger.info("🎉 Application startup complete!")

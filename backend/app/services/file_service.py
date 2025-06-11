@@ -147,6 +147,7 @@ async def process_excel_reviews(
             'processed': 0,
             'errors': [],
             'reviews_created': [],
+            'emails_sent': 0,
             'sentiment_summary': {
                 'positive': 0,
                 'negative': 0,
@@ -178,7 +179,7 @@ async def process_excel_reviews(
                     results['errors'].append(f"Row {index + 1}: Invalid email format: {customer_email}")
                     continue
                 
-                # Create review
+                # Create review in the database and process it through the complete AI + email workflow
                 review_result = await create_and_process_review(
                     customer_name=customer_name,
                     customer_email=customer_email,
@@ -187,6 +188,16 @@ async def process_excel_reviews(
             
                 results['reviews_created'].append(review_result)
                 results['processed'] += 1
+
+                if review_result['email_sent']:
+                    results['emails_sent'] += 1
+                
+                if review_result['analysis']['sentiment'] == 'negative':
+                    results['sentiment_summary']['negative'] += 1
+                elif review_result['analysis']['sentiment'] == 'positive':
+                    results['sentiment_summary']['positive'] += 1
+                else:
+                    results['sentiment_summary']['neutral'] += 1
                 
             except Exception as row_error:
                 logger.error(f"Failed to process row {index + 1}: {str(row_error)}")
@@ -194,14 +205,6 @@ async def process_excel_reviews(
                 continue
         
         logger.info(f"✅ Processed {results['processed']} reviews from Excel file")
-
-        for review in results['reviews_created']:
-            if review['analysis']['sentiment'] == 'negative':
-                results['sentiment_summary']['negative'] += 1
-            elif review['analysis']['sentiment'] == 'positive':
-                results['sentiment_summary']['positive'] += 1
-            else:
-                results['sentiment_summary']['neutral'] += 1
         
         return results
         

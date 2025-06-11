@@ -2,12 +2,13 @@ import logging
 from typing import Dict, List, Any, TypedDict, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
 import google.generativeai as genai
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from app.models.review import UrgencyLevel, ReviewCategory
 from langchain.prompts import PromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from langgraph.graph import StateGraph, END
 from app.core.config import settings
+from app.services.email_service import send_email
 
 
 logger = logging.getLogger(__name__)
@@ -25,9 +26,14 @@ class UrgencyAnalysis(BaseModel):
     urgency_level: str
     reasoning: str
 
+class GeneratedEmail(BaseModel):
+    subject: str
+    body: str
+
 class ReviewAnalysisState(TypedDict):
     review_text: str
     customer_name: str
+    customer_email: str
     rating: int
     sentiment: str
     sentiment_score: float
@@ -35,7 +41,8 @@ class ReviewAnalysisState(TypedDict):
     categories: List[str]
     key_issues: List[str]
     should_send_email: bool
-    email_template: str
+    email_sent: bool
+    type_of_email_template: str
     analysis_complete: bool
     error: str
 
@@ -69,15 +76,33 @@ def create_review_analysis_graph() -> StateGraph:
     workflow.add_node("categorize_issues", categorize_issues)
     workflow.add_node("determine_urgency", determine_urgency)
     workflow.add_node("decide_email_action", decide_email_action)
+    workflow.add_node("generate_email_content", generate_email_content)
     
     # Define the flow
     workflow.set_entry_point("analyze_sentiment")
     workflow.add_edge("analyze_sentiment", "categorize_issues")
     workflow.add_edge("categorize_issues", "determine_urgency")
     workflow.add_edge("determine_urgency", "decide_email_action")
-    workflow.add_edge("decide_email_action", END)
+    
+    workflow.add_conditional_edges(
+        "decide_email_action",
+        should_generate_email,
+        {
+            "generate_email_content": "generate_email_content",
+            END: END
+        }
+    )
+    workflow.add_edge("generate_email_content", END)
     
     return workflow.compile()
+
+
+def should_generate_email(state: ReviewAnalysisState) -> str:
+    """Determine whether to generate an email or end the process."""
+    if state.get("should_send_email"):
+        return "generate_email_content"
+    else:
+        return END
 
 
 async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
@@ -252,9 +277,9 @@ async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
 async def decide_email_action(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Decide whether to send an email and which template to use"""
     try:
-        # Only send emails for negative reviews or medium+ urgency
+        # Only send emails for negative reviews with medium+ urgency
         should_send = (
-            state["sentiment"] == "negative" or 
+            state["sentiment"] == "negative" and
             state["urgency_level"] in ["medium", "high", "critical"]
         )
         
@@ -263,27 +288,147 @@ async def decide_email_action(state: ReviewAnalysisState) -> ReviewAnalysisState
         if should_send:
             # Determine email template based on categories and urgency
             if state["urgency_level"] == "critical":
-                state["email_template"] = "critical_response"
+                state["type_of_email_template"] = "critical_response"
             elif "quality" in state["categories"]:
-                state["email_template"] = "quality_concern"
+                state["type_of_email_template"] = "quality_concern"
             elif "service" in state["categories"]:
-                state["email_template"] = "service_concern"
+                state["type_of_email_template"] = "service_concern"
             elif "delivery" in state["categories"]:
-                state["email_template"] = "delivery_concern"
+                state["type_of_email_template"] = "delivery_concern"
             elif "support" in state["categories"]:
-                state["email_template"] = "support_concern"
+                state["type_of_email_template"] = "support_concern"
             else:
-                state["email_template"] = "general_concern"
+                state["type_of_email_template"] = "general_concern"
         else:
-            state["email_template"] = None
-        
-        state["analysis_complete"] = True
+            state["type_of_email_template"] = None
+            state["analysis_complete"] = True
         
     except Exception as e:
         state["error"] = f"Email decision error: {str(e)}"
         state["should_send_email"] = False
-        state["email_template"] = None
+        state["type_of_email_template"] = None
+        state["analysis_complete"] = True
     
+    return state
+
+
+async def generate_email_content(state: ReviewAnalysisState) -> ReviewAnalysisState:
+    """Generate a personalized email response based on the analysis."""
+    logger.info(f"Starting email generation for customer: {state['customer_name']}")
+
+    try:
+        if not state.get("should_send_email"):
+            state["email_subject"] = ""
+            state["email_body"] = ""
+            logger.info("Email not required, skipping generation.")
+            state["analysis_complete"] = True
+            return state
+
+        parser = PydanticOutputParser(pydantic_object=GeneratedEmail)
+
+        prompt = PromptTemplate(
+            template="""You are a world-class customer support agent responsible for writing personalized, empathetic, and professional emails to customers based on their feedback.
+
+            **Context:**
+            - Customer Name: {customer_name}
+            - Service Name: {service_name}
+            - Service Email: {service_email}
+            - Review Sentiment: {sentiment}
+            - Urgency: {urgency_level}
+            - Key Issues Identified: {key_issues}
+            - Original Review: {review_text}
+
+            **Your Task:**
+            Generate a complete email (subject and body) to send to the customer. The tone and content should be guided by the "Response Type".
+
+            **Response Type:** {response_type}
+
+            **Guidelines for Different Response Types:**
+
+            *   **critical_response**:
+                *   Acknowledge the severity of the issue immediately.
+                *   Express deep concern.
+                *   Offer immediate actions like a call with a manager, a full refund, and a complimentary return visit.
+                *   Keep it concise and action-oriented.
+                *   Example tone: "We are deeply concerned about your recent experience..."
+
+            *   **quality_concern**:
+                *   Apologize for not meeting quality standards.
+                *   Mention that feedback has been shared with the quality team.
+                *   Outline steps being taken (e.g., process review).
+                *   Offer a complimentary return experience to demonstrate improvement.
+                *   Example tone: "We sincerely apologize that our quality did not meet your expectations."
+
+            *   **service_concern**:
+                *   Apologize for the service lapse.
+                *   Mention that feedback has been discussed with the service team and extra training is being implemented.
+                *   Offer a complimentary service on the next visit to make it right.
+                *   Example tone: "We are sorry to hear that our service did not meet your expectations."
+            
+            *   **general_concern**:
+                *   Thank the customer for their feedback.
+                *   Acknowledge their concerns and state that they have been shared with management.
+                *   Reassure them that you are taking steps to improve.
+                *   Invite them back to experience the improvements.
+                *   Example tone: "Thank you for sharing your feedback about your experience..."
+            
+            *   **delivery_concern**:
+                *   Apologize for delivery issues.
+                *   Mention that you've reviewed the issue with logistics.
+                *   Offer a delivery credit or priority handling for the next order.
+                *   Example tone: "We sincerely apologize for the delivery issues you experienced."
+
+            *   **support_concern**:
+                *   Apologize for the support experience.
+                *   Mention that support training and processes are being improved.
+                *   Encourage them to contact support again for proper assistance.
+                *   Example tone: "Thank you for your feedback regarding your support experience."
+
+            **Final Output Instructions:**
+            - Write the email body in plain text, not markdown.
+            - Ensure the tone is appropriate for the situation.
+            - Personalize the email using the customer's name and the specific issues they raised.
+            - Sign off with the "{service_name}".
+
+            {format_instructions}
+            """,
+            input_variables=[
+                "customer_name", "service_name", "service_email",
+                "sentiment", "urgency_level", "key_issues", "review_text",
+                "response_type"
+            ],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
+        
+        llm = get_llm()
+        chain = prompt | llm | parser
+
+        analysis = await chain.ainvoke({
+            "customer_name": state['customer_name'],
+            "service_name": settings.from_name,
+            "service_email": settings.from_email,
+            "sentiment": state['sentiment'],
+            "urgency_level": state['urgency_level'],
+            "key_issues": '\n- '.join(state['key_issues']),
+            "review_text": state['review_text'],
+            "response_type": state['type_of_email_template']
+        })
+
+        logger.info(f"Email content generated for customer: {state['customer_name']}")
+
+        email_sent_successfully = await send_email(
+            to_email=state['customer_email'],
+            subject=analysis.subject,
+            body=analysis.body
+        )
+        state['email_sent'] = email_sent_successfully
+
+    except Exception as e:
+        logger.error(f"Email generation error for customer {state['customer_name']}: {str(e)}")
+        state["error"] = f"Email generation error: {str(e)}"
+        state['email_sent'] = False
+
+    state["analysis_complete"] = True
     return state
 
 
@@ -302,6 +447,7 @@ def get_review_analysis_graph() -> StateGraph:
 async def analyze_review(
     review_text: str, 
     customer_name: str, 
+    customer_email: str,
     rating: int = None
 ) -> Dict[str, Any]:
     """Analyze a review and return the complete analysis"""
@@ -311,6 +457,7 @@ async def analyze_review(
     initial_state = ReviewAnalysisState(
         review_text=review_text,
         customer_name=customer_name,
+        customer_email=customer_email,
         rating=rating or 0,
         sentiment="",
         sentiment_score=0.0,
@@ -318,7 +465,8 @@ async def analyze_review(
         categories=[],
         key_issues=[],
         should_send_email=False,
-        email_template="",
+        email_sent=False,
+        type_of_email_template="",
         analysis_complete=False,
         error=""
     )
@@ -335,7 +483,8 @@ async def analyze_review(
         "categories": result["categories"],
         "key_issues": result["key_issues"],
         "should_send_email": result["should_send_email"],
-        "email_template": result["email_template"],
+        "email_sent": result["email_sent"],
+        "type_of_email_template": result["type_of_email_template"],
         "analysis_complete": result["analysis_complete"],
         "error": result.get("error", "")
     }
