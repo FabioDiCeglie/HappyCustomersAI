@@ -9,11 +9,10 @@ from langchain.output_parsers import PydanticOutputParser
 from langgraph.graph import StateGraph, END
 from app.core.config import settings
 
-# Set up logger
+
 logger = logging.getLogger(__name__)
 
 
-# Pydantic models for structured outputs
 class SentimentAnalysis(BaseModel):
     sentiment: str
     confidence: float
@@ -22,11 +21,9 @@ class IssueCategorizationAnalysis(BaseModel):
     categories: List[str]
     key_issues: List[str]
 
-
 class UrgencyAnalysis(BaseModel):
     urgency_level: str
     reasoning: str
-
 
 class ReviewAnalysisState(TypedDict):
     review_text: str
@@ -43,17 +40,14 @@ class ReviewAnalysisState(TypedDict):
     error: str
 
 
-# Global LLM instance for reuse
 _llm_instance: Optional[Any] = None
 
 def get_llm() -> Any:
     """Get or create LLM instance"""
     global _llm_instance
     if _llm_instance is None:
-        # Configure the Google Generative AI client
         genai.configure(api_key=settings.google_api_key)
         
-        # Create the client (GenerativeModel instance)
         generative_model = genai.GenerativeModel('gemini-2.0-flash-exp')
         
         _llm_instance = ChatGoogleGenerativeAI(
@@ -62,7 +56,6 @@ def get_llm() -> Any:
             google_api_key=settings.google_api_key,
             temperature=0.1,
         )
-        # Manually set the generative model
         _llm_instance._generative_model = generative_model
     return _llm_instance
 
@@ -92,10 +85,8 @@ async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
     logger.info(f"Starting sentiment analysis for customer: {state['customer_name']}")
     
     try:
-        # Set up the parser
         parser = PydanticOutputParser(pydantic_object=SentimentAnalysis)
         
-        # Create the prompt template
         prompt = PromptTemplate(
             template="""You are an expert at analyzing customer review sentiment across all industries and business types.
         
@@ -117,10 +108,8 @@ async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
         
         llm = get_llm()
         
-        # Create the chain
         chain = prompt | llm | parser
         
-        # Invoke the chain
         analysis = await chain.ainvoke({
             "customer_name": state['customer_name'],
             "rating": state.get('rating', 'Not provided'),
@@ -148,10 +137,8 @@ async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
     try:
         categories = [cat.value for cat in ReviewCategory]
         
-        # Set up the parser
         parser = PydanticOutputParser(pydantic_object=IssueCategorizationAnalysis)
         
-        # Create the prompt template
         prompt = PromptTemplate(
             template="""You are an expert at categorizing customer feedback across all industries and business types.
         
@@ -183,10 +170,8 @@ async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
         
         llm = get_llm()
         
-        # Create the chain
         chain = prompt | llm | parser
         
-        # Invoke the chain
         analysis = await chain.ainvoke({
             "categories": ', '.join(categories),
             "review_text": state['review_text'],
@@ -214,10 +199,8 @@ async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
     try:
         urgency_levels = [level.value for level in UrgencyLevel]
         
-        # Set up the parser
         parser = PydanticOutputParser(pydantic_object=UrgencyAnalysis)
         
-        # Create the prompt template
         prompt = PromptTemplate(
             template="""You are an expert at assessing the urgency of customer feedback across all industries.
         
@@ -243,10 +226,8 @@ async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
         
         llm = get_llm()
         
-        # Create the chain
         chain = prompt | llm | parser
         
-        # Invoke the chain
         analysis = await chain.ainvoke({
             "urgency_levels": ', '.join(urgency_levels),
             "sentiment": state['sentiment'],

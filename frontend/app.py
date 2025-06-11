@@ -16,10 +16,9 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .stTitle {
+    h1 {
         font-size: 3rem !important;
         color: #1f2937 !important;
-        text-align: center;
         margin-bottom: 2rem !important;
     }
     
@@ -39,6 +38,7 @@ st.markdown("""
         border-radius: 10px;
         color: white;
         text-align: center;
+        margin: 0.5rem 0;
     }
     
     .warning-card {
@@ -47,6 +47,7 @@ st.markdown("""
         border-radius: 10px;
         color: white;
         text-align: center;
+        margin: 0.5rem 0;
     }
     
     .upload-section {
@@ -66,7 +67,6 @@ st.markdown("""
 
 API_BASE_URL = "http://localhost:8000"
 UPLOAD_ENDPOINT = f"{API_BASE_URL}/api/v1/reviews/upload-excel"
-ANALYTICS_ENDPOINT = f"{API_BASE_URL}/api/v1/analytics/dashboard"
 
 def main():
     # Header
@@ -75,13 +75,6 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.markdown("## 📊 Navigation")
-        page = st.selectbox(
-            "Choose a page:",
-            ["📤 Upload Reviews", "📈 Analytics Dashboard", "ℹ️ About"]
-        )
-        
-        st.markdown("---")
         st.markdown("## 📋 File Requirements")
         st.markdown("""
         **Required columns:**
@@ -95,14 +88,23 @@ def main():
         
         **Max file size:** 10MB
         """)
+        st.markdown("---")
+        st.markdown("## ℹ️ About AI Review Analysis System")
     
-    # Main content based on selected page
-    if page == "📤 Upload Reviews":
-        upload_page()
-    elif page == "📈 Analytics Dashboard":
-        analytics_page()
-    else:
-        about_page()
+        st.markdown("""
+        ### 🎯 What It Does
+        Automatically analyze customer reviews using AI to extract:
+        - **Sentiment**: Positive, negative, or neutral emotions
+        - **Categories**: Quality, service, pricing, delivery issues
+        - **Urgency**: Priority levels for customer support
+        
+        ### 🔧 Technology
+        - **AI**: Gemini Pro language model
+        - **Backend**: FastAPI + MongoDB
+        - **Frontend**: Streamlit
+        """)
+    
+    upload_page()
 
 def upload_page():
     """Upload and process Excel files page"""
@@ -148,10 +150,8 @@ def upload_page():
     st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_file is not None:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🚀 Process Reviews with AI", type="primary", use_container_width=True):
-                process_file(uploaded_file)
+        if st.button("🚀 Process Reviews with AI", type="primary", use_container_width=True):
+            process_file(uploaded_file)
 
 def process_file(uploaded_file):
     """Process the uploaded file with the API"""
@@ -197,7 +197,7 @@ def display_results(result: Dict[str, Any]):
     
     results_data = result.get("results", {})
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.markdown(f"""
@@ -231,6 +231,15 @@ def display_results(result: Dict[str, Any]):
         <div class="metric-card">
             <h3>📈 Success Rate</h3>
             <h2>{success_rate:.1f}%</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col5:
+        emails_sent = results_data.get('emails_sent', 0)
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3>📧 Emails Sent</h3>
+            <h2>{emails_sent}</h2>
         </div>
         """, unsafe_allow_html=True)
     
@@ -297,104 +306,6 @@ def display_results(result: Dict[str, Any]):
         with st.expander(f"View {len(results_data['errors'])} errors"):
             for error in results_data['errors']:
                 st.error(error)
-
-def analytics_page():
-    """Analytics dashboard page"""
-    st.markdown("## 📈 Analytics Dashboard")
-    
-    try:
-        response = requests.get(ANALYTICS_ENDPOINT, timeout=10)
-        
-        if response.status_code == 200:
-            analytics = response.json()
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric(
-                    "📊 Total Reviews",
-                    analytics.get('total_reviews', 0)
-                )
-            
-            with col2:
-                st.metric(
-                    "🤖 AI Processed",
-                    analytics.get('ai_processed', 0)
-                )
-            
-            with col3:
-                st.metric(
-                    "📧 Emails Sent",
-                    analytics.get('emails_sent', 0)
-                )
-            
-            with col4:
-                processing_rate = analytics.get('processing_rate', 0)
-                st.metric(
-                    "⚡ Processing Rate",
-                    f"{processing_rate:.1f}%"
-                )
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                sentiment_data = analytics.get('sentiment_breakdown', {})
-                if sentiment_data:
-                    fig_sentiment = px.pie(
-                        values=list(sentiment_data.values()),
-                        names=[k.capitalize() for k in sentiment_data.keys()],
-                        title="Overall Sentiment Distribution",
-                        color_discrete_sequence=['#10b981', '#ef4444', '#6b7280']
-                    )
-                    st.plotly_chart(fig_sentiment, use_container_width=True)
-            
-            with col2:
-                urgency_data = analytics.get('urgency_breakdown', {})
-                if urgency_data:
-                    fig_urgency = px.bar(
-                        x=[k.capitalize() for k in urgency_data.keys()],
-                        y=list(urgency_data.values()),
-                        title="Urgency Level Distribution",
-                        color=list(urgency_data.values()),
-                        color_continuous_scale='reds'
-                    )
-                    st.plotly_chart(fig_urgency, use_container_width=True)
-            
-        else:
-            st.error("Failed to load analytics data")
-            
-    except requests.exceptions.ConnectionError:
-        st.error("🔌 Cannot connect to the analytics service. Please ensure the backend is running.")
-    except Exception as e:
-        st.error(f"Error loading analytics: {str(e)}")
-
-def about_page():
-    """About page with system information"""
-    st.markdown("## ℹ️ About AI Review Analysis System")
-    
-    st.markdown("""
-    ### 🎯 What It Does
-    Automatically analyze customer reviews using AI to extract:
-    - **Sentiment**: Positive, negative, or neutral emotions
-    - **Categories**: Quality, service, pricing, delivery issues
-    - **Urgency**: Priority levels for customer support
-    
-    ### 🚀 How to Use
-    1. Upload Excel/CSV file with customer reviews
-    2. Click "🚀 Process Reviews with AI"
-    3. View analysis results and download processed data
-    4. Check analytics dashboard for insights
-    
-    ### 📋 File Requirements
-    - Columns: `customer_name`, `customer_email`, `review`
-    - Formats: Excel (.xlsx, .xls) or CSV (.csv)
-    - Size limit: 10MB
-    
-    ### 🔧 Technology
-    - **AI**: Gemini Pro language model
-    - **Backend**: FastAPI + MongoDB
-    - **Frontend**: Streamlit
-    """)
 
 if __name__ == "__main__":
     main() 
