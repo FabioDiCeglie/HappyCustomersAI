@@ -207,7 +207,6 @@ $RECYCLE.BIN/
 *.model
 *.pkl
 *.pickle
-models/
 checkpoints/
 wandb/
 .neptune/
