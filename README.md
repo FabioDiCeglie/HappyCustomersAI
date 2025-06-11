@@ -6,7 +6,7 @@ This project uses AI to analyze customer feedback from Excel or CSV files. It id
 
 ## 🚀 Core Features
 
--   **Batch Processing**: Upload Excel or CSV files containing customer reviews for efficient processing.
+-   **Batch Processing**: Upload Excel or CSV files containing customer reviews.
 -   **AI-Powered Analysis**: Utilizes Gemini Pro to perform:
     -   **Sentiment Analysis**: Classifies reviews as positive, negative, or neutral.
     -   **Issue Categorization**: Identifies specific issues like food quality, service, or pricing.
