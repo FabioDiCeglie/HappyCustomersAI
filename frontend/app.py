@@ -244,9 +244,10 @@ def display_results(result: Dict[str, Any]):
         """, unsafe_allow_html=True)
     
     sentiment_summary = results_data.get('sentiment_summary', {})
+    reviews_created = results_data.get('reviews_created', [])
     
     if sentiment_summary:
-        st.markdown("### 😊 Sentiment Analysis")
+        st.markdown("### 😊 Sentiment & Urgency Analysis")
         
         col1, col2 = st.columns(2)
         
@@ -269,26 +270,34 @@ def display_results(result: Dict[str, Any]):
             st.plotly_chart(fig_pie, use_container_width=True)
         
         with col2:
-            fig_bar = px.bar(
-                x=[l.capitalize() for l in labels],
-                y=values,
-                color=values,
-                color_continuous_scale=['red', 'yellow', 'green'],
-                title="Sentiment Counts"
-            )
-            fig_bar.update_layout(showlegend=False)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            if reviews_created:
+                urgency_levels = [r['analysis']['urgency_level'] for r in reviews_created]
+                urgency_summary = pd.Series(urgency_levels).value_counts().reindex(['low', 'medium', 'high']).dropna()
+
+                fig_bar = px.bar(
+                    x=[l.capitalize() for l in urgency_summary.index],
+                    y=urgency_summary.values,
+                    color=[l.capitalize() for l in urgency_summary.index],
+                    color_discrete_map={
+                        'Low': '#10b981',    # Green
+                        'Medium': '#f59e0b', # Amber
+                        'High': '#ef4444'    # Red
+                    },
+                    title="Urgency Distribution"
+                )
+                fig_bar.update_layout(showlegend=False)
+                st.plotly_chart(fig_bar, use_container_width=True)
     
-    if results_data.get('reviews_created'):
+    if reviews_created:
         st.markdown("### 📝 Processed Reviews")
         
         display_df = pd.DataFrame({
-            'Customer': [r['customer_name'] for r in results_data['reviews_created']],
-            'Email': [r['customer_email'] for r in results_data['reviews_created']],
-            'Sentiment': [r['analysis']['sentiment'].capitalize() for r in results_data['reviews_created']],
-            'Confidence': [f"{r['analysis']['sentiment_score']:.2f}" for r in results_data['reviews_created']],
-            'Urgency': [r['analysis']['urgency_level'].capitalize() for r in results_data['reviews_created']],
-            'Categories': [', '.join(r['analysis']['categories']) for r in results_data['reviews_created']]
+            'Customer': [r['customer_name'] for r in reviews_created],
+            'Email': [r['customer_email'] for r in reviews_created],
+            'Sentiment': [r['analysis']['sentiment'].capitalize() for r in reviews_created],
+            'Confidence': [f"{r['analysis']['sentiment_score']:.2f}" for r in reviews_created],
+            'Urgency': [r['analysis']['urgency_level'].capitalize() for r in reviews_created],
+            'Categories': [', '.join(r['analysis']['categories']) for r in reviews_created]
         })
         
         st.dataframe(display_df, use_container_width=True)
