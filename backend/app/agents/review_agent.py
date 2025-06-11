@@ -107,7 +107,7 @@ def should_generate_email(state: ReviewAnalysisState) -> str:
 
 async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Analyze the sentiment of the review"""
-    logger.info(f"Starting sentiment analysis for customer: {state['customer_name']}")
+    logger.debug(f"🎭 Starting sentiment analysis for customer: {state['customer_name']}")
     
     try:
         parser = PydanticOutputParser(pydantic_object=SentimentAnalysis)
@@ -144,10 +144,10 @@ async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
         state["sentiment"] = analysis.sentiment
         state["sentiment_score"] = analysis.confidence
         
-        logger.info(f"Sentiment analysis completed - Sentiment: {state['sentiment']}, Score: {state['sentiment_score']}")
+        logger.info(f"🎭 Sentiment for {state['customer_name']}: {state['sentiment']} ({state['sentiment_score']:.2f})")
         
     except Exception as e:
-        logger.error(f"Error analyzing sentiment: {e}")
+        logger.error(f"❌ Error analyzing sentiment: {e}")
         state["error"] = f"Sentiment analysis error: {str(e)}"
         state["sentiment"] = "neutral"
         state["sentiment_score"] = 0.0
@@ -157,7 +157,7 @@ async def analyze_sentiment(state: ReviewAnalysisState) -> ReviewAnalysisState:
 
 async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Categorize the specific issues mentioned in the review"""
-    logger.info(f"Starting issue categorization for customer: {state['customer_name']}")
+    logger.debug(f"🏷️ Starting issue categorization for customer: {state['customer_name']}")
     
     try:
         categories = [cat.value for cat in ReviewCategory]
@@ -206,10 +206,10 @@ async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
         state["categories"] = analysis.categories
         state["key_issues"] = analysis.key_issues
         
-        logger.info(f"Issue categorization completed - Categories: {state['categories']}, Key issues: {len(state['key_issues'])} identified")
+        logger.info(f"🏷️ Categorization for {state['customer_name']}: {state['categories']} ({len(state['key_issues'])} issues)")
         
     except Exception as e:
-        logger.error(f"Categorization error for customer {state['customer_name']}: {str(e)}")
+        logger.error(f"❌ Categorization error for customer {state['customer_name']}: {str(e)}")
         state["error"] = f"Categorization error: {str(e)}"
         state["categories"] = ["other"]
         state["key_issues"] = []
@@ -219,7 +219,7 @@ async def categorize_issues(state: ReviewAnalysisState) -> ReviewAnalysisState:
 
 async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Determine the urgency level of the review"""
-    logger.info(f"Starting urgency determination for customer: {state['customer_name']}")
+    logger.debug(f"🔥 Starting urgency determination for customer: {state['customer_name']}")
     
     try:
         urgency_levels = [level.value for level in UrgencyLevel]
@@ -264,10 +264,10 @@ async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
         
         state["urgency_level"] = analysis.urgency_level
         
-        logger.info(f"Urgency determination completed - Urgency level: {state['urgency_level']}")
+        logger.info(f"🔥 Urgency for {state['customer_name']}: {state['urgency_level']}")
         
     except Exception as e:
-        logger.error(f"Urgency determination error for customer {state['customer_name']}: {str(e)}")
+        logger.error(f"❌ Urgency determination error for customer {state['customer_name']}: {str(e)}")
         state["error"] = f"Urgency determination error: {str(e)}"
         state["urgency_level"] = "medium"
     
@@ -276,6 +276,7 @@ async def determine_urgency(state: ReviewAnalysisState) -> ReviewAnalysisState:
 
 async def decide_email_action(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Decide whether to send an email and which template to use"""
+    logger.debug(f"🤔 Deciding email action for {state['customer_name']}")
     try:
         # Only send emails for negative reviews with medium+ urgency
         should_send = (
@@ -299,31 +300,24 @@ async def decide_email_action(state: ReviewAnalysisState) -> ReviewAnalysisState
                 state["type_of_email_template"] = "support_concern"
             else:
                 state["type_of_email_template"] = "general_concern"
+            logger.info(f"✅ Email will be sent to {state['customer_name']} (template: {state['type_of_email_template']})")
         else:
             state["type_of_email_template"] = None
             state["analysis_complete"] = True
+            logger.info(f"📪 Email not required for {state['customer_name']}. Conditions not met.")
         
     except Exception as e:
+        logger.error(f"❌ Email decision error for customer {state['customer_name']}: {str(e)}")
         state["error"] = f"Email decision error: {str(e)}"
-        state["should_send_email"] = False
-        state["type_of_email_template"] = None
-        state["analysis_complete"] = True
     
     return state
 
 
 async def generate_email_content(state: ReviewAnalysisState) -> ReviewAnalysisState:
     """Generate a personalized email response based on the analysis."""
-    logger.info(f"Starting email generation for customer: {state['customer_name']}")
+    logger.debug(f"📧 Starting email generation for customer: {state['customer_name']}")
 
     try:
-        if not state.get("should_send_email"):
-            state["email_subject"] = ""
-            state["email_body"] = ""
-            logger.info("Email not required, skipping generation.")
-            state["analysis_complete"] = True
-            return state
-
         parser = PydanticOutputParser(pydantic_object=GeneratedEmail)
 
         prompt = PromptTemplate(
@@ -414,7 +408,7 @@ async def generate_email_content(state: ReviewAnalysisState) -> ReviewAnalysisSt
             "response_type": state['type_of_email_template']
         })
 
-        logger.info(f"Email content generated for customer: {state['customer_name']}")
+        logger.info(f"✅ Email content generated for {state['customer_name']}")
 
         email_sent_successfully = await send_email(
             to_email=state['customer_email'],
@@ -424,7 +418,7 @@ async def generate_email_content(state: ReviewAnalysisState) -> ReviewAnalysisSt
         state['email_sent'] = email_sent_successfully
 
     except Exception as e:
-        logger.error(f"Email generation error for customer {state['customer_name']}: {str(e)}")
+        logger.error(f"❌ Email generation error for customer {state['customer_name']}: {str(e)}")
         state["error"] = f"Email generation error: {str(e)}"
         state['email_sent'] = False
 
@@ -452,7 +446,7 @@ async def analyze_review(
 ) -> Dict[str, Any]:
     """Analyze a review and return the complete analysis"""
     
-    logger.info(f"Starting complete review analysis for customer: {customer_name}")
+    logger.info(f"🚀 Analyzing review for: {customer_name}")
     
     initial_state = ReviewAnalysisState(
         review_text=review_text,
@@ -474,7 +468,7 @@ async def analyze_review(
     graph = get_review_analysis_graph()
     result = await graph.ainvoke(initial_state)
     
-    logger.info(f"Review analysis completed for customer: {customer_name} - Sentiment: {result['sentiment']}, Urgency: {result['urgency_level']}, Email needed: {result['should_send_email']}")
+    logger.info(f"🎉 Analysis complete for {customer_name}: Sentiment={result['sentiment']}, Urgency={result['urgency_level']}, EmailSent={result['email_sent']}")
     
     return {
         "sentiment": result["sentiment"],
