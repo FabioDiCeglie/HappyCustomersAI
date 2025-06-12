@@ -3,7 +3,6 @@ from enum import Enum
 from typing import Optional, List
 from beanie import Document
 from pydantic import Field
-from bson import ObjectId
 
 
 class SentimentType(str, Enum):
@@ -33,7 +32,6 @@ class ReviewCategory(str, Enum):
 
 
 class Review(Document):
-
     customer_name: str = Field(..., min_length=1, max_length=255)
     customer_email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
     review_text: str = Field(..., min_length=1)

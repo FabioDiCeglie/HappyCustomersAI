@@ -138,10 +138,8 @@ async def process_excel_reviews(
         
         logger.info(f"📊 Found {len(df)} rows in Excel file")
         
-        # Validate structure
         column_mapping = validate_dataframe_structure(df)
         
-        # Process reviews
         results = {
             'total_rows': len(df),
             'processed': 0,
