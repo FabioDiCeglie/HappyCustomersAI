@@ -1,4 +1,4 @@
-# AI Customer Feedback Management System
+# HappyCustomersAI
 
 An intelligent system that automatically classifies customer reviews and sends personalized follow-up emails to customers with negative experiences.
 
