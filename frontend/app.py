@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-
+import os
 import time
 from typing import Dict, Any
 
@@ -65,7 +65,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 UPLOAD_ENDPOINT = f"{API_BASE_URL}/api/v1/reviews/upload-excel"
 
 def main():
