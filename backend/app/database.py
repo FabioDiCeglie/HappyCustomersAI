@@ -2,8 +2,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 import logging
 from typing import Optional
-
 from app.core.config import settings
+from app.models.review import Review
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,7 @@ async def close_mongo_connection():
 
 
 async def init_database():
-    """Initialize database with Beanie"""
-    from app.models.review import Review
-    
+    """Initialize database with Beanie"""    
     try:
         await init_beanie(
             database=database,
