@@ -9,12 +9,11 @@ set -e
 
 echo "Building the Docker image with Cloud Build from the project root..."
 echo "This will create a new image with the 'latest' tag."
-gcloud builds submit --region=europe-west1 --config backend/cloudbuild.yaml .
+gcloud builds submit --region=europe-west1 --config cloudbuild.yaml .
 
 echo ""
 echo "Deploying the new 'latest' image to Cloud Run using service.yaml..."
-# We need to be in the backend directory to run the replace command with service.yaml
-(cd backend && gcloud run services replace service.yaml --region europe-west1)
+gcloud run services replace service.yaml --region europe-west1
 
 echo ""
 echo "✅ Deployment successful!"

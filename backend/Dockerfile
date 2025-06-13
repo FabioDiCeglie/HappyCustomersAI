@@ -7,14 +7,14 @@ RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY pyproject.toml .
-RUN uv pip install --no-cache -r pyproject.toml
+RUN uv pip install --no-cache .
 
 FROM python:3.11-slim
 
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
-COPY ./backend/app ./app
+COPY ./app ./app
 # Use this below just for local development
 # COPY ./backend/.env .
 

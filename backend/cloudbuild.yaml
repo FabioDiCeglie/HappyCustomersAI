@@ -1,5 +1,5 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'europe-west1-docker.pkg.dev/happycustomersai/happy-customers-ai-backend/backend-image:latest', '-f', 'backend/Dockerfile', '.']
+  args: ['build', '-t', 'europe-west1-docker.pkg.dev/happycustomersai/happy-customers-ai-backend/backend-image:latest', '-f', 'Dockerfile', '.']
 images:
 - 'europe-west1-docker.pkg.dev/happycustomersai/happy-customers-ai-backend/backend-image:latest'

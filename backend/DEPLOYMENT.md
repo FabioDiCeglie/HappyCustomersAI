@@ -85,7 +85,7 @@ This workflow uses Cloud Build to build the image in the cloud, which can be fas
 ### Step 1: Build the Image with Cloud Build
 Because our `Dockerfile` is in a subdirectory (`backend/`), we must use a `cloudbuild.yaml` file to tell Cloud Build where to find it. This command uses that config to build the image and push it to the Artifact Registry.
 ```bash
-gcloud builds submit --config backend/cloudbuild.yaml .
+gcloud builds submit --config cloudbuild.yaml .
 ```
 
 ### Step 2: Deploy the Image Manually
@@ -118,7 +118,7 @@ You only need to do this once to get started.
 ### Step 2: Build the Image
 The image must still be built and pushed to the registry first (using either local Docker or Cloud Build).
 ```bash
-gcloud builds submit --config backend/cloudbuild.yaml .
+gcloud builds submit --config cloudbuild.yaml .
 ```
 
 ### Step 3: Deploy Using the YAML file
