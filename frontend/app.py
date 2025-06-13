@@ -121,6 +121,10 @@ def upload_page():
         "Enter your email to receive sample notifications:",
         placeholder="your.email@example.com"
     )
+    st.caption(
+        "You'll receive an AI-generated email for a sample review with negative sentiment and medium/high urgency. "
+        "This demonstrates how the AI automatically creates empathetic responses for customer support."
+    )
 
     if st.button("🌟 Process Sample File", use_container_width=True):
         if not user_email:
