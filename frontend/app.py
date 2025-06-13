@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 st.set_page_config(
-    page_title="AI Review Analysis System",
+    page_title="Happy Customers AI",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
