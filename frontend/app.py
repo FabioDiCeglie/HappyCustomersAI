@@ -6,6 +6,9 @@ import plotly.graph_objects as go
 import os
 import time
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 st.set_page_config(
     page_title="AI Review Analysis System",
