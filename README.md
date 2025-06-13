@@ -48,6 +48,20 @@ The dashboard provides a simple interface to upload files, preview data, and tra
 -   Pandas for data manipulation
 -   Plotly for data visualization
 
+## ☁️ Deployment
+
+The application is designed to be deployed with a containerized backend on **Google Cloud Run** and a frontend on **Streamlit Community Cloud**.
+
+### Backend
+
+The backend is deployed as a Docker container on Google Cloud Run. For detailed instructions on how to build and deploy the backend, including manual and automated workflows, see the deployment guide:
+
+[**➡️ Backend Deployment Guide (`backend/DEPLOYMENT.md`)**](./backend/DEPLOYMENT.md)
+
+### Frontend
+
+The Streamlit application is deployed directly from the GitHub repository to the Streamlit Community Cloud.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
