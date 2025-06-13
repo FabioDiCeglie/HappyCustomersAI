@@ -15,7 +15,7 @@ WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
 COPY ./backend/app ./app
-COPY ./backend/.env .
+# COPY ./backend/.env .
 
 ENV PATH="/opt/venv/bin:$PATH"
 

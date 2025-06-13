@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     from_name: str = Field(..., env="FROM_NAME")
     
     # Application Settings
-    debug: bool = Field(False, env="DEBUG")
+    debug: bool = Field(True, env="DEBUG")
     cors_origins: List[str] = Field(
         ["http://localhost:3000", "http://localhost:8501", "http://127.0.0.1:8501", "http://localhost:8080", "http://127.0.0.1:8080"], env="CORS_ORIGINS"
     )
