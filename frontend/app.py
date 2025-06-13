@@ -116,10 +116,22 @@ def upload_page():
     st.markdown("### 📁 Upload Your Excel File")
 
     st.markdown("Don't have a file? Click here to test the app with a sample file.")
+    
+    user_email = st.text_input(
+        "Enter your email to receive sample notifications:",
+        placeholder="your.email@example.com"
+    )
+
     if st.button("🌟 Process Sample File", use_container_width=True):
+        if not user_email:
+            st.warning("Please enter your email address to process the sample file.")
+            return
+        
         try:
-            with open("sample_reviews.csv", "rb") as f:
-                csv_bytes = f.read()
+            df = pd.read_csv("sample_reviews.csv")
+            df['customer_email'] = user_email  # Replace email with user's input
+            
+            csv_bytes = df.to_csv(index=False).encode('utf-8')
 
             sample_file = SimpleNamespace(
                 name="sample_reviews.csv",
@@ -127,14 +139,14 @@ def upload_page():
                 type="text/csv"
             )
 
-            st.info("Processing `sample_reviews.csv`...")
-            df = pd.read_csv("sample_reviews.csv")
-            st.markdown("### 👀 Sample File Preview")
+            st.info("Processing `sample_reviews.csv` with your email address...")
+            
+            st.markdown("### 👀 Sample File Preview (Emails Replaced)")
             st.dataframe(df.head(10), use_container_width=True)
             st.markdown(f"**Total rows:** {len(df)}")
             
             process_file(sample_file)
-            return 
+            return
         except FileNotFoundError:
             st.error("`sample_reviews.csv` not found. Please make sure it's in the project's root directory.")
             return
