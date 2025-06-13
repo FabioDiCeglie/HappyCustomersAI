@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import os
 import time
 from typing import Dict, Any
+from types import SimpleNamespace
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -113,6 +114,36 @@ def upload_page():
     """Upload and process Excel files page"""
     
     st.markdown("### 📁 Upload Your Excel File")
+
+    st.markdown("Don't have a file? Click here to test the app with a sample file.")
+    if st.button("🌟 Process Sample File", use_container_width=True):
+        try:
+            with open("sample_reviews.csv", "rb") as f:
+                csv_bytes = f.read()
+
+            sample_file = SimpleNamespace(
+                name="sample_reviews.csv",
+                getvalue=lambda: csv_bytes,
+                type="text/csv"
+            )
+
+            st.info("Processing `sample_reviews.csv`...")
+            df = pd.read_csv("sample_reviews.csv")
+            st.markdown("### 👀 Sample File Preview")
+            st.dataframe(df.head(10), use_container_width=True)
+            st.markdown(f"**Total rows:** {len(df)}")
+            
+            process_file(sample_file)
+            return 
+        except FileNotFoundError:
+            st.error("`sample_reviews.csv` not found. Please make sure it's in the project's root directory.")
+            return
+        except Exception as e:
+            st.error(f"An error occurred while processing the sample file: {e}")
+            return
+
+    st.markdown("---")
+    st.markdown("#### Or upload your own file")
     
     uploaded_file = st.file_uploader(
         "Choose an Excel or CSV file",
@@ -149,8 +180,6 @@ def upload_page():
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
             return
-    
-    st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_file is not None:
         if st.button("🚀 Process Reviews with AI", type="primary", use_container_width=True):
