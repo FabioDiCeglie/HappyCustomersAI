@@ -1,0 +1,85 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+    run.googleapis.com/urls: '["https://happy-customers-ai-backend-798740787556.europe-west1.run.app","https://happy-customers-ai-backend-c65npd4uua-ew.a.run.app"]'
+  labels:
+    cloud.googleapis.com/location: europe-west1
+  name: happy-customers-ai-backend
+  namespace: '798740787556'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '20'
+        run.googleapis.com/client-name: gcloud
+        run.googleapis.com/client-version: 526.0.1
+        run.googleapis.com/startup-cpu-boost: 'true'
+      labels:
+        client.knative.dev/nonce: mraqlxwvwb
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 80
+      containers:
+      - env:
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: google-api-key
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: mongodb-url
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: smtp-host
+        - name: SMTP_PORT
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: smtp-port
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: smtp-user
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: smtp-password
+        - name: FROM_EMAIL
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: from-email
+        - name: FROM_NAME
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: from-name
+        image: europe-west1-docker.pkg.dev/happycustomersai/happy-customers-ai-backend/backend-image:latest
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      serviceAccountName: 798740787556-compute@developer.gserviceaccount.com
+      timeoutSeconds: 300
+  traffic:
+  - latestRevision: true
+    percent: 100

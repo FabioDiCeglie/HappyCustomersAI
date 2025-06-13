@@ -1,5 +1,0 @@
-steps:
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'europe-west1-docker.pkg.dev/ai-image-recognition-6d6e8/happy-customers-ai-backend/backend-image:latest', '-f', 'backend/Dockerfile', '.']
-images:
-- 'europe-west1-docker.pkg.dev/ai-image-recognition-6d6e8/happy-customers-ai-backend/backend-image:latest'
