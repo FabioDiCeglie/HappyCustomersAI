@@ -98,19 +98,14 @@ To run the application, you'll need to set up the following environment variable
 
 ```env
 # AI Configuration
-GEMINI_API_KEY=your_gemini_api_key
-LANGCHAIN_API_KEY=your_langchain_api_key
+GOOGLE_API_KEY=your_gemini_api_key
 
 # MongoDB Configuration
 MONGODB_URL=mongodb://localhost:27017
-MONGODB_DATABASE=email_support_ai
 
 # Email Configuration
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email@gmail.com
 SMTP_PASSWORD=your_app_password
-
-# Security
-SECRET_KEY=your_secret_key
 ```
